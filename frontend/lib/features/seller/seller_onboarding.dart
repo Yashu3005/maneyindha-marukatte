@@ -68,7 +68,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         Text('Business Category:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: _category,
+          initialValue: _category,
           hint: const Text('Select Category'),
           items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
           onChanged: (v) => setState(() => _category = v),
@@ -77,7 +77,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         Text('Years Of Experience:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: _years,
+          initialValue: _years,
           hint: const Text('Select Experience'),
           items: _experience.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
           onChanged: (v) => setState(() => _years = v),
@@ -190,7 +190,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         Text('Identity Type:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          value: _identityType,
+          initialValue: _identityType,
           items: _identityTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
           onChanged: (v) => setState(() => _identityType = v ?? _identityType),
         ),

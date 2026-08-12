@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../services/api_client.dart';
+
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';

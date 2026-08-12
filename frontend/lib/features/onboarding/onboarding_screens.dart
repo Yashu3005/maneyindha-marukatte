@@ -58,7 +58,7 @@ class CreamButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: Material(
-        color: onTap == null ? MMColors.cream.withOpacity(0.5) : MMColors.cream,
+        color: onTap == null ? MMColors.cream.withValues(alpha: 0.5) : MMColors.cream,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
