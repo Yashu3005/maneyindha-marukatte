@@ -16,7 +16,7 @@ class BusinessScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Shop')),
       body: business.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: 'Could not load this shop.'),
+        error: (e, _) => const ErrorView(message: 'Could not load this shop.'),
         data: (b) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -48,7 +48,7 @@ class BusinessScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             products.when(
               loading: () => const LoadingView(),
-              error: (e, _) => ErrorView(message: 'Could not load products.'),
+              error: (e, _) => const ErrorView(message: 'Could not load products.'),
               data: (items) => items.isEmpty
                   ? const EmptyView(message: 'No products listed yet.')
                   : GridView.builder(

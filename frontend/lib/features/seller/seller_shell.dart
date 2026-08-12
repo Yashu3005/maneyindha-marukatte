@@ -146,8 +146,8 @@ class _DashboardTab extends ConsumerWidget {
             loading: () => const LoadingView(),
             error: (e, _) => ErrorView(message: apiError(e)),
             data: (items) => items.isEmpty
-                ? Card(color: MMColors.cream,
-                    child: const Padding(
+                ? const Card(color: MMColors.cream,
+                    child: Padding(
                         padding: EdgeInsets.all(16),
                         child: Text('No orders yet — your first one is coming!')))
                 : Column(

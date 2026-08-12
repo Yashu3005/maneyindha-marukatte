@@ -53,7 +53,7 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
       appBar: AppBar(title: const Text('Product')),
       body: product.when(
         loading: () => const LoadingView(),
-        error: (e, _) => ErrorView(message: 'Could not load this product.'),
+        error: (e, _) => const ErrorView(message: 'Could not load this product.'),
         data: (p) {
           final images = (p['images'] as List?) ?? [];
           final business = p['business'];
