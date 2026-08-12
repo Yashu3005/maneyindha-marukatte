@@ -39,3 +39,20 @@ Base: `/api/v1` — JWT bearer auth — consistent envelope:
 
 Auth endpoints now rate-limited to 30 req/15min.
 New models: Review, Cart, Coupon, Wishlist, Wallet, Transaction, Notification.
+
+## Phase 3 additions
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET/DELETE | /cart | customer | totals computed server-side, stale coupons auto-ignored |
+| POST/PATCH | /cart/items | customer | one business per cart; qty 0 removes |
+| POST | /cart/coupon | customer | full validation: window, business scope, min amount, per-user + total usage limits |
+| POST | /reviews | customer | orderId ⇒ verified purchase (delivered orders only); duplicate → 409 |
+| GET | /reviews/product/:productId | – | paginated |
+| POST | /reviews/:id/reply | entrepreneur | own business only |
+| GET/POST | /wishlist, /wishlist/products, /wishlist/businesses | customer | toggle semantics |
+| POST | /businesses/:id/verification-documents | entrepreneur | status → in_review |
+| GET | /admin/verifications | admin | filter by status |
+| POST | /admin/verifications/:businessId | admin | approve / reject / request_info + owner notification |
+
+Order checkout now: re-validates coupon, computes discount, atomically decrements stock, increments coupon usage, clears cart.
+Ratings on products and businesses recomputed on every new review.

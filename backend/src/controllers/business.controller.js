@@ -36,3 +36,10 @@ exports.create = async (req, res, next) => {
     ok(res, business, undefined, 201);
   } catch (e) { next(e); }
 };
+
+exports.uploadDocs = async (req, res, next) => {
+  try {
+    const adminService = require('../services/admin.service');
+    ok(res, await adminService.uploadVerificationDocs(req.user.id, req.params.id, req.body.documents));
+  } catch (e) { next(e); }
+};
