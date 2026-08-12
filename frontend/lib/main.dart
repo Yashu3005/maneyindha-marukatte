@@ -4,7 +4,6 @@ import 'theme/app_theme.dart';
 import 'routing/app_router.dart';
 
 void main() {
-  // Phase 2: Firebase.initializeApp() before runApp.
   runApp(const ProviderScope(child: MMApp()));
 }
 
@@ -17,6 +16,7 @@ class MMApp extends ConsumerWidget {
       title: 'Maneyindha Marukatte',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.light,
       routerConfig: ref.watch(appRouterProvider),
       debugShowCheckedModeBanner: false,
     );

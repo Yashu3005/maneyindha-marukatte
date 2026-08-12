@@ -5,9 +5,10 @@ const validate = require('../middleware/validate');
 const reviewController = require('../controllers/review.controller');
 
 router.get('/product/:productId', reviewController.listForProduct);
+router.get('/business/:businessId', reviewController.listForBusiness);
 
 router.post('/',
-  requireAuth, requireRole('customer'),
+  requireAuth, requireRole('customer', 'entrepreneur'),
   validate(Joi.object({
     productId: Joi.string().hex().length(24).required(),
     orderId: Joi.string().hex().length(24),

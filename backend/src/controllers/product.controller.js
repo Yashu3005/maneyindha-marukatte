@@ -5,10 +5,11 @@ const AppError = require('../utils/AppError');
 
 exports.list = async (req, res, next) => {
   try {
-    const { q, category, page = 1, limit = 20, sort = '-createdAt' } = req.query;
+    const { q, category, business, page = 1, limit = 20, sort = '-createdAt' } = req.query;
     const filter = { isActive: true };
     if (q) filter.$text = { $search: q };
     if (category) filter.category = category;
+    if (business) filter.business = business;
     const [items, total] = await Promise.all([
       Product.find(filter).sort(sort).skip((page - 1) * limit).limit(Number(limit)),
       Product.countDocuments(filter),
@@ -32,5 +33,18 @@ exports.create = async (req, res, next) => {
     if (!business) throw new AppError('Business not found or not owned by you', 403);
     const product = await Product.create(req.body);
     ok(res, product, undefined, 201);
+  } catch (e) { next(e); }
+};
+
+exports.remove = async (req, res, next) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) throw new AppError('Product not found', 404);
+    const owned = await Business.findOne({ _id: product.business, owner: req.user.id });
+    if (!owned) throw new AppError('You can only delete your own products', 403);
+    product.isActive = false;
+    product.deletedAt = new Date();
+    await product.save();
+    ok(res, { deleted: true });
   } catch (e) { next(e); }
 };

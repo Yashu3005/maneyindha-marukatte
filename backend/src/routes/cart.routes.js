@@ -4,7 +4,8 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const cartController = require('../controllers/cart.controller');
 
-router.use(requireAuth, requireRole('customer'));
+// Entrepreneurs can shop too (easy switch to customer mode)
+router.use(requireAuth, requireRole('customer', 'entrepreneur'));
 
 router.get('/', cartController.get);
 router.post('/items',

@@ -4,7 +4,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const wishlistController = require('../controllers/wishlist.controller');
 
-router.use(requireAuth, requireRole('customer'));
+router.use(requireAuth, requireRole('customer', 'entrepreneur'));
 
 router.get('/', wishlistController.get);
 router.post('/products',

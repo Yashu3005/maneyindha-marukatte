@@ -17,9 +17,10 @@ const businessSchema = new mongoose.Schema(
     address: { line1: String, city: String, state: String, pincode: String },
     workingHours: [{ day: Number, open: String, close: String, closed: Boolean }],
     gstNumber: String,
+    yearsOfExperience: String,
     verification: {
       status: { type: String, enum: ['pending', 'in_review', 'approved', 'rejected'], default: 'pending', index: true },
-      documents: [{ type: { type: String }, url: String, uploadedAt: Date }],
+      documents: [{ type: { type: String }, url: String, identityType: String, uploadedAt: Date }],
       reviewedBy: { type: mongoose.Types.ObjectId, ref: 'User' },
       reviewedAt: Date,
       rejectionReason: String,

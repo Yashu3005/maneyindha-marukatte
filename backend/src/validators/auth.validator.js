@@ -11,5 +11,6 @@ exports.registerSchema = Joi.object({
 exports.loginSchema = Joi.object({
   email: Joi.string().email(),
   phone: Joi.string(),
+  username: Joi.string(),
   password: Joi.string().required(),
-}).or('email', 'phone');
+}).or('email', 'phone', 'username');

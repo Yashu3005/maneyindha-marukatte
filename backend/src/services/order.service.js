@@ -65,11 +65,18 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
 };
 
 exports.ordersForUser = async (user) => {
-  const filter =
-    user.role === 'entrepreneur' ? {} : // scoped via business lookup in later phase
-    user.role === 'delivery_partner' ? { deliveryPartner: user.id } :
-    { customer: user.id };
-  return Order.find(filter).sort('-createdAt').limit(50);
+  let filter;
+  if (user.role === 'entrepreneur') {
+    const Business = require('../models/Business');
+    const owned = await Business.find({ owner: user.id }).select('_id');
+    // Orders received by their shops + orders they placed while shopping
+    filter = { $or: [{ business: { $in: owned.map((b) => b._id) } }, { customer: user.id }] };
+  } else if (user.role === 'delivery_partner') {
+    filter = { deliveryPartner: user.id };
+  } else {
+    filter = { customer: user.id };
+  }
+  return Order.find(filter).sort('-createdAt').limit(50).populate('business', 'name');
 };
 
 exports.transition = async (orderId, nextStatus, user) => {

@@ -10,6 +10,10 @@ const userSchema = new mongoose.Schema(
     phone: { type: String, trim: true, index: true, sparse: true },
     passwordHash: { type: String, select: false },
     role: { type: String, enum: ROLES, default: 'customer', index: true },
+    username: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
+    profileComplete: { type: Boolean, default: false },
+    securityQuestions: { type: mongoose.Schema.Types.Mixed, select: false },
+    bankAccount: { type: mongoose.Schema.Types.Mixed },
     avatarUrl: String,
     language: { type: String, default: 'en' },
     addresses: [
