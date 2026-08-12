@@ -15,3 +15,8 @@ exports.refresh = async (req, res, next) => {
   try { ok(res, await authService.refresh(req.body.refreshToken)); }
   catch (e) { next(e); }
 };
+
+exports.firebaseExchange = async (req, res, next) => {
+  try { ok(res, await require('../services/auth.service').exchangeFirebaseToken(req.body)); }
+  catch (e) { next(e); }
+};

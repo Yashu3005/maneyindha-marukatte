@@ -30,3 +30,12 @@ Base: `/api/v1` — JWT bearer auth — consistent envelope:
 - Rate limiting: global 500/15min; tighten auth endpoints in Phase 17
 - Swagger/OpenAPI: mount `swagger-ui-express` at `/api/docs` in Phase 3
 - Versioning: breaking changes → `/api/v2`
+
+## Phase 2 additions
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| POST | /auth/firebase-exchange | – | Firebase ID token → backend JWT pair; role settable only at first login, admin roles blocked |
+| GET | /api/docs | – | Swagger UI (interactive API docs) |
+
+Auth endpoints now rate-limited to 30 req/15min.
+New models: Review, Cart, Coupon, Wishlist, Wallet, Transaction, Notification.

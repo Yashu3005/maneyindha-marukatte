@@ -43,3 +43,37 @@ function sanitize(user) {
   const { _id, name, email, phone, role, avatarUrl, language } = user;
   return { id: _id, name, email, phone, role, avatarUrl, language };
 }
+
+// --- Phase 2: Firebase token exchange ---
+// Client signs in with Firebase (phone OTP / Google / Apple / email),
+// sends the Firebase ID token here, receives our JWT pair.
+const { getFirebase } = require('../config/firebase');
+
+exports.exchangeFirebaseToken = async ({ idToken, role, name }) => {
+  if (!idToken) throw new AppError('idToken required', 422);
+
+  let decoded;
+  try {
+    decoded = await getFirebase().auth().verifyIdToken(idToken);
+  } catch {
+    throw new AppError('Invalid Firebase token', 401);
+  }
+
+  let user = await User.findOne({ firebaseUid: decoded.uid });
+
+  if (!user) {
+    // First login → create account. Role only settable at creation,
+    // and never an admin role via this endpoint.
+    const safeRole = ['customer', 'entrepreneur', 'delivery_partner'].includes(role) ? role : 'customer';
+    user = await User.create({
+      firebaseUid: decoded.uid,
+      name: name || decoded.name || 'User',
+      email: decoded.email,
+      phone: decoded.phone_number?.replace('+91', ''),
+      role: safeRole,
+    });
+  }
+
+  if (!user.isActive) throw new AppError('Account disabled', 403);
+  return { user: sanitize(user), ...issueTokens(user), isNewUser: !user.createdAt || user.createdAt.getTime() > Date.now() - 5000 };
+};
