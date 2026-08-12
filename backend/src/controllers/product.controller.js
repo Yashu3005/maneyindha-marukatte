@@ -9,7 +9,16 @@ exports.list = async (req, res, next) => {
     const filter = { isActive: true };
     if (q) filter.$text = { $search: q };
     if (category) filter.category = category;
-    if (business) filter.business = business;
+    if (business) {
+      // Specific shop requested (e.g. an entrepreneur viewing their own).
+      filter.business = business;
+    } else {
+      // Public catalog: only products from approved, active shops.
+      const approved = await Business
+        .find({ 'verification.status': 'approved', isActive: true })
+        .select('_id');
+      filter.business = { $in: approved.map((b) => b._id) };
+    }
     const [items, total] = await Promise.all([
       Product.find(filter).sort(sort).skip((page - 1) * limit).limit(Number(limit)),
       Product.countDocuments(filter),

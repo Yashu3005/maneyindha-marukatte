@@ -40,7 +40,13 @@ exports.switchRole = async (req, res, next) => {
     if (!user) throw new AppError('User not found', 404);
     user.role = role;
     await user.save();
-    ok(res, { user: sanitize(user), ...issueTokens(user) });
+    // Tell the client whether a business already exists so returning
+    // entrepreneurs skip onboarding — decided server-side, no race.
+    const Business = require('../models/Business');
+    const hasBusiness = role === 'entrepreneur'
+      ? !!(await Business.exists({ owner: user._id, isActive: true }))
+      : false;
+    ok(res, { user: sanitize(user), ...issueTokens(user), hasBusiness });
   } catch (e) { next(e); }
 };
 

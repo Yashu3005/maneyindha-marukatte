@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
@@ -93,27 +92,56 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
             Text('Categories', style: serif(18)),
             const SizedBox(height: 8),
             SizedBox(
-              height: 40,
+              height: 110,
               child: businesses.when(
                 loading: () => const SizedBox(),
                 error: (e, _) => const SizedBox(),
                 data: (shops) {
-                  final cats = <String>{};
+                  // category name -> banner of the first shop in it
+                  final catImages = <String, String?>{};
                   for (final b in shops) {
                     final c = b['category'];
-                    if (c is Map && c['name'] != null) cats.add(c['name'].toString());
+                    if (c is Map && c['name'] != null) {
+                      catImages.putIfAbsent(
+                          c['name'].toString(), () => b['bannerUrl']?.toString());
+                    }
                   }
-                  final list = cats.toList();
+                  final list = catImages.keys.toList();
                   return ListView.separated(
                     scrollDirection: Axis.horizontal,
                     itemCount: list.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) => FilterChip(
-                      label: Text(list[i]),
-                      selected: _category == list[i],
-                      onSelected: (sel) =>
-                          setState(() => _category = sel ? list[i] : null),
-                    ),
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (_, i) {
+                      final name = list[i];
+                      final selected = _category == name;
+                      return GestureDetector(
+                        onTap: () => setState(
+                            () => _category = selected ? null : name),
+                        child: Column(children: [
+                          Container(
+                            width: 78, height: 78,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: selected
+                                    ? MMColors.deepOlive
+                                    : MMColors.sage,
+                                width: selected ? 3 : 1.5,
+                              ),
+                            ),
+                            child: ClipOval(
+                                child: NetImage(catImages[name],
+                                    width: 78, height: 78)),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(name,
+                              style: serif(12,
+                                  weight: selected
+                                      ? FontWeight.w700
+                                      : FontWeight.w400)),
+                        ]),
+                      );
+                    },
                   );
                 },
               ),
@@ -325,8 +353,14 @@ class _CustomerProfile extends ConsumerWidget {
             title: const Text('Become an Entrepreneur'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
-              await ref.read(authProvider.notifier).switchRole('entrepreneur');
-              if (context.mounted) context.go('/seller/onboarding/business');
+              final hasBusiness = await ref
+                  .read(authProvider.notifier)
+                  .switchRole('entrepreneur');
+              ref.invalidate(myBusinessesProvider);
+              ref.invalidate(ordersProvider);
+              if (context.mounted) {
+                context.go(hasBusiness ? '/seller' : '/seller/onboarding/business');
+              }
             },
           ),
           ListTile(

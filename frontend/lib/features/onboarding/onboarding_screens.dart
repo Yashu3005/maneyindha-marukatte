@@ -5,6 +5,7 @@ import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../theme/app_theme.dart';
+import '../../shared/mm_logo.dart';
 
 /// Shared olive canvas used across the Figma onboarding flow.
 class OliveScaffold extends StatelessWidget {
@@ -58,7 +59,7 @@ class CreamButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: Material(
-        color: onTap == null ? MMColors.cream.withValues(alpha: 0.5) : MMColors.cream,
+        color: onTap == null ? MMColors.cream.withOpacity(0.5) : MMColors.cream,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -74,8 +75,8 @@ class CreamButton extends StatelessWidget {
 }
 
 Widget wordmark({double size = 30, Color color = Colors.white}) => Column(children: [
-      Icon(Icons.local_florist, size: size + 14, color: color),
-      const SizedBox(height: 8),
+      MMLogo(size: size * 2.6),
+      const SizedBox(height: 10),
       Text('MANEYINDHA', style: serif(size, color: color)),
       Text('MARUKATTE', style: serif(size, color: color)),
     ]);
@@ -380,8 +381,13 @@ class _RoleScreenState extends ConsumerState<RoleScreen> {
         if (mounted) context.go('/onboarding/success');
       } else {
         // Entrepreneur and Both begin the seller journey (they can shop too).
-        await ref.read(authProvider.notifier).switchRole('entrepreneur');
-        if (mounted) context.go('/seller/onboarding/business');
+        final hasBusiness = await ref
+            .read(authProvider.notifier)
+            .switchRole('entrepreneur');
+        ref.invalidate(myBusinessesProvider);
+        if (mounted) {
+          context.go(hasBusiness ? '/seller' : '/seller/onboarding/business');
+        }
       }
     } catch (e) {
       if (mounted) {

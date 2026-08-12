@@ -37,6 +37,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         'address': {'line1': _address.text.trim(), 'city': 'Bengaluru'},
       });
       final business = Map<String, dynamic>.from(res.data['data'] as Map);
+      ref.invalidate(myBusinessesProvider);
       ref.read(sellerOnboardingProvider.notifier).state = {
         'businessId': business['_id'],
         'businessName': _name.text.trim(),
@@ -68,7 +69,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         Text('Business Category:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          initialValue: _category,
+          value: _category,
           hint: const Text('Select Category'),
           items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
           onChanged: (v) => setState(() => _category = v),
@@ -77,7 +78,7 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         Text('Years Of Experience:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          initialValue: _years,
+          value: _years,
           hint: const Text('Select Experience'),
           items: _experience.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
           onChanged: (v) => setState(() => _years = v),
@@ -190,7 +191,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         Text('Identity Type:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
-          initialValue: _identityType,
+          value: _identityType,
           items: _identityTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
           onChanged: (v) => setState(() => _identityType = v ?? _identityType),
         ),

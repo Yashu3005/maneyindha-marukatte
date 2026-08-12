@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
+import '../../services/repositories.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -20,6 +21,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() { _busy = true; _error = null; });
     try {
       await ref.read(authProvider.notifier).login(_email.text.trim(), _password.text);
+      ref.invalidate(myBusinessesProvider);
+      ref.invalidate(ordersProvider);
+      ref.invalidate(cartProvider);
       if (mounted) {
         final auth = ref.read(authProvider);
         if (auth.isAdmin) {

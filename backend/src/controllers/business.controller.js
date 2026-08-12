@@ -1,4 +1,5 @@
 const Business = require('../models/Business');
+require('../models/Category'); // must be registered before populate('category')
 const { ok } = require('../utils/apiResponse');
 const AppError = require('../utils/AppError');
 

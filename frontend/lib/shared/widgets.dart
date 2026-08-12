@@ -6,8 +6,12 @@ String rupees(dynamic amount) => '₹${(amount ?? 0).toString()}';
 class LoadingView extends StatelessWidget {
   const LoadingView({super.key});
   @override
-  Widget build(BuildContext context) =>
-      const Center(child: Padding(padding: EdgeInsets.all(48), child: CircularProgressIndicator()));
+  Widget build(BuildContext context) => const Center(
+      child: Padding(
+          padding: EdgeInsets.all(16),
+          child: SizedBox(
+              width: 28, height: 28,
+              child: CircularProgressIndicator(strokeWidth: 3))));
 }
 
 class ErrorView extends StatelessWidget {
@@ -16,16 +20,15 @@ class ErrorView extends StatelessWidget {
   const ErrorView({super.key, required this.message, this.onRetry});
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
+        child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.cloud_off, size: 40),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
-            if (onRetry != null) ...[
-              const SizedBox(height: 12),
-              FilledButton(onPressed: onRetry, child: const Text('Try again')),
-            ],
+            const Icon(Icons.cloud_off, size: 22),
+            const SizedBox(height: 4),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall),
+            if (onRetry != null)
+              TextButton(onPressed: onRetry, child: const Text('Try again')),
           ]),
         ),
       );

@@ -28,13 +28,12 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
           data: {'productId': widget.id, 'quantity': 1});
       ref.invalidate(cartProvider);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Added to cart'),
-            action: SnackBarAction(
-                label: 'View cart', onPressed: () => context.push('/cart')),
-          ),
-        );
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(const SnackBar(
+            content: Text('Added to cart — find it in the Cart tab'),
+            duration: Duration(seconds: 2),
+          ));
       }
     } catch (e) {
       if (mounted) {
@@ -53,7 +52,7 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
       appBar: AppBar(title: const Text('Product')),
       body: product.when(
         loading: () => const LoadingView(),
-        error: (e, _) => const ErrorView(message: 'Could not load this product.'),
+        error: (e, _) => ErrorView(message: 'Could not load this product.'),
         data: (p) {
           final images = (p['images'] as List?) ?? [];
           final business = p['business'];

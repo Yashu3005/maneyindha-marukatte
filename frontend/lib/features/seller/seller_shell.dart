@@ -146,8 +146,8 @@ class _DashboardTab extends ConsumerWidget {
             loading: () => const LoadingView(),
             error: (e, _) => ErrorView(message: apiError(e)),
             data: (items) => items.isEmpty
-                ? const Card(color: MMColors.cream,
-                    child: Padding(
+                ? Card(color: MMColors.cream,
+                    child: const Padding(
                         padding: EdgeInsets.all(16),
                         child: Text('No orders yet — your first one is coming!')))
                 : Column(
@@ -300,10 +300,18 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
           final shopId = _shopId(myShops);
           if (shopId == null) {
             return Center(
-              child: FilledButton(
-                onPressed: () => context.go('/seller/onboarding/business'),
-                child: const Text('Set up your business first'),
-              ),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const Text('No business found on this account.'),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => context.go('/seller/onboarding/business'),
+                  child: const Text('Set up your business'),
+                ),
+                TextButton(
+                  onPressed: () => ref.invalidate(myBusinessesProvider),
+                  child: const Text('I already have one — refresh'),
+                ),
+              ]),
             );
           }
           final products = ref.watch(productsProvider(shopId));
@@ -619,6 +627,8 @@ class _SellerProfileTab extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 await ref.read(authProvider.notifier).switchRole('customer');
+                ref.invalidate(ordersProvider);
+                ref.invalidate(cartProvider);
                 if (context.mounted) context.go('/app');
               },
             ),

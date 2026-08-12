@@ -73,9 +73,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _saveUser(Map<String, dynamic>.from(res.data['data'] as Map));
   }
 
-  Future<void> switchRole(String role) async {
+  /// Returns true when the account already has a business (so returning
+  /// entrepreneurs skip onboarding).
+  Future<bool> switchRole(String role) async {
     final res = await ApiClient.dio.post('/users/me/role', data: {'role': role});
-    await _apply(Map<String, dynamic>.from(res.data['data'] as Map));
+    final data = Map<String, dynamic>.from(res.data['data'] as Map);
+    await _apply(data);
+    return data['hasBusiness'] == true;
   }
 
   Future<void> setCredentials(String username, String password) async {
