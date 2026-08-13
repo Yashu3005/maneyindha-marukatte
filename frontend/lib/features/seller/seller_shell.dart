@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
+import '../../services/cloudinary.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
 
@@ -85,7 +86,7 @@ class _DashboardTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     final shops = ref.watch(myBusinessesProvider);
-    final orders = ref.watch(ordersProvider);
+    final orders = ref.watch(sellerOrdersProvider);
 
     return Container(
       color: MMColors.olive,
@@ -210,6 +211,22 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
                   child: Text(imageUrl == null ? 'Product photo:' : 'Photo selected ✓'),
                 ),
                 const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.upload_file, size: 18),
+                    label: const Text('Upload photo'),
+                    onPressed: () async {
+                      final url = await pickAndUploadImage();
+                      if (url != null) setD(() => imageUrl = url);
+                    },
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('or pick a stock photo:'),
+                ),
                 Consumer(builder: (c, r, _) {
                   final photos = r.watch(imagesProvider(
                       name.text.trim().isEmpty ? 'handmade product' : name.text.trim()));
@@ -371,7 +388,7 @@ class _SellerOrdersTab extends ConsumerWidget {
   Future<void> _transition(BuildContext context, WidgetRef ref, String id, String status) async {
     try {
       await ApiClient.dio.patch('/orders/$id/status', data: {'status': status});
-      ref.invalidate(ordersProvider);
+      ref.invalidate(sellerOrdersProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
@@ -382,7 +399,7 @@ class _SellerOrdersTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orders = ref.watch(ordersProvider);
+    final orders = ref.watch(sellerOrdersProvider);
     const nextStep = {
       'pending': 'confirmed',
       'confirmed': 'preparing',
@@ -398,7 +415,7 @@ class _SellerOrdersTab extends ConsumerWidget {
           child: orders.when(
             loading: () => const LoadingView(),
             error: (e, _) => ErrorView(
-                message: apiError(e), onRetry: () => ref.invalidate(ordersProvider)),
+                message: apiError(e), onRetry: () => ref.invalidate(sellerOrdersProvider)),
             data: (items) => items.isEmpty
                 ? const EmptyView(message: 'No orders yet.')
                 : ListView.separated(
@@ -445,7 +462,7 @@ class _EarningsTab extends ConsumerWidget {
   const _EarningsTab();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orders = ref.watch(ordersProvider);
+    final orders = ref.watch(sellerOrdersProvider);
     return SafeArea(
       child: orders.when(
         loading: () => const LoadingView(),
@@ -627,7 +644,7 @@ class _SellerProfileTab extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 await ref.read(authProvider.notifier).switchRole('customer');
-                ref.invalidate(ordersProvider);
+                ref.invalidate(sellerOrdersProvider);
                 ref.invalidate(cartProvider);
                 if (context.mounted) context.go('/app');
               },

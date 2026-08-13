@@ -37,6 +37,7 @@ exports.login = async ({ email, phone, username, password }) => {
   if (!user || !(await bcrypt.compare(password, user.passwordHash || ''))) {
     throw new AppError('Invalid credentials', 401);
   }
+  if (!user.isActive) throw new AppError('Account disabled. Contact support.', 403);
   return { user: sanitize(user), ...issueTokens(user) };
 };
 
@@ -55,20 +56,23 @@ exports.refresh = async (refreshToken) => {
 // --- OTP (demo-friendly; wire an email provider before production) ---
 const otpStore = new Map(); // email -> { otp, expires }
 const DEMO_OTP = '029403';
+// Demo OTP stays enabled (even on hosted deployments) until you explicitly
+// set ALLOW_DEMO_OTP=false — do that once a real email provider is wired up.
+const demoAllowed = () => process.env.ALLOW_DEMO_OTP !== 'false';
 
 exports.sendOtp = async (email) => {
   if (!email) throw new AppError('Email required', 422);
   const otp = String(crypto.randomInt(100000, 999999));
   otpStore.set(email.toLowerCase(), { otp, expires: Date.now() + 10 * 60 * 1000 });
   const out = { sent: true };
-  if (process.env.NODE_ENV !== 'production') out.demoOtp = DEMO_OTP;
+  if (demoAllowed()) out.demoOtp = DEMO_OTP;
   return out;
 };
 
 exports.verifyOtp = async ({ email, otp }) => {
   if (!email || !otp) throw new AppError('Email and OTP required', 422);
   const rec = otpStore.get(email.toLowerCase());
-  const demoOk = process.env.NODE_ENV !== 'production' && otp === DEMO_OTP;
+  const demoOk = demoAllowed() && otp === DEMO_OTP;
   const realOk = rec && rec.expires > Date.now() && rec.otp === otp;
   if (!demoOk && !realOk) throw new AppError('Invalid or expired OTP', 401);
   otpStore.delete(email.toLowerCase());

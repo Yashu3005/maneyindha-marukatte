@@ -36,8 +36,15 @@ final cartProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return _asMap(res.data['data']);
 });
 
+/// Orders I placed as a buyer.
 final ordersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final res = await ApiClient.dio.get('/orders/mine');
+  final res = await ApiClient.dio.get('/orders/mine', queryParameters: {'view': 'buyer'});
+  return _asList(res.data['data']);
+});
+
+/// Orders received by my shop (entrepreneur view).
+final sellerOrdersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final res = await ApiClient.dio.get('/orders/mine', queryParameters: {'view': 'seller'});
   return _asList(res.data['data']);
 });
 
@@ -70,3 +77,9 @@ final businessReviewsProvider =
 /// Scratch state carried through the seller onboarding steps.
 final sellerOnboardingProvider =
     StateProvider<Map<String, dynamic>>((ref) => {});
+
+
+final adminStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final res = await ApiClient.dio.get('/admin/stats');
+  return _asMap(res.data['data']);
+});

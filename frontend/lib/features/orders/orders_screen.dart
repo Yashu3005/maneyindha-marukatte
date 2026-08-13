@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
@@ -22,6 +23,23 @@ const _statusLabels = {
 
 class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
+
+  Future<void> _verifyPayment(BuildContext context, WidgetRef ref, String orderId) async {
+    try {
+      final res = await ApiClient.dio.post('/payments/verify', data: {'orderId': orderId});
+      final paid = (res.data['data'] as Map)['paid'] == true;
+      ref.invalidate(ordersProvider);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(paid ? 'Payment confirmed ✓' : 'Payment not completed yet')));
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(apiError(e))));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -70,9 +88,24 @@ class OrdersScreen extends ConsumerWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          trailing: Chip(
-                            label: Text(_statusLabels[status] ?? status),
-                            visualDensity: VisualDensity.compact,
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Chip(
+                                label: Text(_statusLabels[status] ?? status),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              if ((o['payment'] as Map?)?['status'] == 'paid')
+                                const Text('Paid ✓',
+                                    style: TextStyle(color: Colors.teal, fontSize: 12))
+                              else if ((o['payment'] as Map?)?['method'] == 'razorpay')
+                                TextButton(
+                                  onPressed: () => _verifyPayment(
+                                      context, ref, o['_id'].toString()),
+                                  child: const Text('Verify payment'),
+                                ),
+                            ],
                           ),
                         ),
                       );

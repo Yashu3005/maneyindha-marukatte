@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
+import '../../services/cloudinary.dart';
 import '../../theme/app_theme.dart';
 import '../onboarding/onboarding_screens.dart';
 
@@ -113,6 +114,45 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   String? _photoUrl;
 
   Future<String?> _pick(String query) async {
+    // Real document upload first (Cloudinary); sample images as fallback.
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Add document'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'upload'),
+            child: const Row(children: [
+              Icon(Icons.upload_file), SizedBox(width: 8),
+              Text('Upload from device'),
+            ]),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, 'sample'),
+            child: const Row(children: [
+              Icon(Icons.image_search), SizedBox(width: 8),
+              Text('Use a sample image (demo)'),
+            ]),
+          ),
+        ],
+      ),
+    );
+    if (choice == null) return null;
+    if (choice == 'upload') {
+      try {
+        return await pickAndUploadImage();
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(apiError(e))));
+        }
+        return null;
+      }
+    }
+    return _pickSample(query);
+  }
+
+  Future<String?> _pickSample(String query) async {
     return showDialog<String>(
       context: context,
       builder: (ctx) => Dialog(

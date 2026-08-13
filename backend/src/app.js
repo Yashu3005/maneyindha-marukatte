@@ -10,6 +10,7 @@ const openapi = require('./docs/openapi.json');
 const { errorHandler, notFound } = require('./middleware/error');
 
 const app = express();
+app.set('trust proxy', 1); // behind Vercel/hosting proxy
 
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGINS?.split(',') || '*' }));

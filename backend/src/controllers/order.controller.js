@@ -7,7 +7,7 @@ exports.create = async (req, res, next) => {
 };
 
 exports.myOrders = async (req, res, next) => {
-  try { ok(res, await orderService.ordersForUser(req.user)); }
+  try { ok(res, await orderService.ordersForUser(req.user, req.query.view)); }
   catch (e) { next(e); }
 };
 

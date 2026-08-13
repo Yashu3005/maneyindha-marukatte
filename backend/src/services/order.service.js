@@ -64,20 +64,25 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
   return order;
 };
 
-exports.ordersForUser = async (user) => {
+// view: 'seller' = orders received by my shops; 'buyer' = orders I placed.
+exports.ordersForUser = async (user, view) => {
   let filter;
-  if (user.role === 'entrepreneur') {
+  if (user.role === 'delivery_partner') {
+    filter = { deliveryPartner: user.id };
+  } else if (view === 'seller' && user.role === 'entrepreneur') {
     const Business = require('../models/Business');
     const owned = await Business.find({ owner: user.id }).select('_id');
-    // Orders received by their shops + orders they placed while shopping
-    filter = { $or: [{ business: { $in: owned.map((b) => b._id) } }, { customer: user.id }] };
-  } else if (user.role === 'delivery_partner') {
-    filter = { deliveryPartner: user.id };
+    filter = { business: { $in: owned.map((b) => b._id) } };
   } else {
     filter = { customer: user.id };
   }
   return Order.find(filter).sort('-createdAt').limit(50).populate('business', 'name');
 };
+
+// Which statuses each role may set. Only the shop that received the
+// order (its owner account) can accept/progress it.
+const SELLER_SET = ['confirmed', 'rejected', 'preparing', 'ready', 'picked_up', 'out_for_delivery', 'delivered'];
+const CUSTOMER_SET = ['cancelled'];
 
 exports.transition = async (orderId, nextStatus, user) => {
   const order = await Order.findById(orderId);
@@ -86,6 +91,23 @@ exports.transition = async (orderId, nextStatus, user) => {
   const allowed = VALID_TRANSITIONS[order.status] || [];
   if (!allowed.includes(nextStatus)) {
     throw new AppError(`Invalid transition ${order.status} -> ${nextStatus}`, 422);
+  }
+
+  const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+  if (!isAdmin) {
+    if (SELLER_SET.includes(nextStatus)) {
+      const Business = require('../models/Business');
+      const ownsShop = await Business.exists({ _id: order.business, owner: user.id });
+      if (!ownsShop) {
+        throw new AppError('Only the shop that received this order can update it', 403);
+      }
+    } else if (CUSTOMER_SET.includes(nextStatus)) {
+      if (String(order.customer) !== String(user.id)) {
+        throw new AppError('You can only cancel your own orders', 403);
+      }
+    } else {
+      throw new AppError('Not allowed', 403);
+    }
   }
 
   order.status = nextStatus;

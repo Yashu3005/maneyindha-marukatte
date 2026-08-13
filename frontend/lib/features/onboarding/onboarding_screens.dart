@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
+import '../../services/cloudinary.dart';
 import '../../theme/app_theme.dart';
 import '../../shared/mm_logo.dart';
 
@@ -310,6 +311,21 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         Text('Choose your photo (required):',
             style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 8),
+        CreamButton(
+          label: 'Upload from device',
+          onTap: () async {
+            try {
+              final url = await pickAndUploadImage();
+              if (url != null) setState(() => _avatarUrl = url);
+            } catch (e) {
+              setState(() => _error = apiError(e));
+            }
+          },
+        ),
+        const SizedBox(height: 10),
+        Text('or pick one:',
+            style: serif(12, weight: FontWeight.w400, color: MMColors.cream)),
+        const SizedBox(height: 6),
         SizedBox(
           height: 64,
           child: photos.when(

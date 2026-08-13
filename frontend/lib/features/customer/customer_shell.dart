@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:geolocator/geolocator.dart';
+import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
@@ -50,6 +52,46 @@ class _CustomerHome extends ConsumerStatefulWidget {
 class _CustomerHomeState extends ConsumerState<_CustomerHome> {
   String _query = '';
   String? _category;
+  bool _nearMe = false;
+  List<Map<String, dynamic>>? _nearbyShops;
+  bool _locating = false;
+
+  Future<void> _toggleNearMe() async {
+    if (_nearMe) {
+      setState(() { _nearMe = false; _nearbyShops = null; });
+      return;
+    }
+    setState(() => _locating = true);
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw Exception('Location permission denied');
+      }
+      final pos = await Geolocator.getCurrentPosition();
+      final res = await ApiClient.dio.get('/businesses/nearby', queryParameters: {
+        'lat': pos.latitude, 'lng': pos.longitude, 'radiusKm': 50,
+      });
+      final shops = (res.data['data'] as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      setState(() { _nearMe = true; _nearbyShops = shops; });
+      if (shops.isEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('No shops within 50 km yet — showing none. Toggle off to see all.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Could not get location: ${e.toString()}')));
+      }
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -147,7 +189,18 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
               ),
             ),
             const SizedBox(height: 20),
-            Text('Nearby shops', style: serif(18)),
+            Row(children: [
+              Expanded(child: Text(_nearMe ? 'Shops near you' : 'All shops', style: serif(18))),
+              FilterChip(
+                avatar: _locating
+                    ? const SizedBox(width: 14, height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.my_location, size: 16),
+                label: const Text('Near me'),
+                selected: _nearMe,
+                onSelected: (_) => _toggleNearMe(),
+              ),
+            ]),
             const SizedBox(height: 8),
             SizedBox(
               height: 170,
@@ -156,7 +209,8 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                 error: (e, _) => ErrorView(
                     message: 'Could not load shops.',
                     onRetry: () => ref.invalidate(businessesProvider)),
-                data: (shops) {
+                data: (allShops) {
+                  final shops = _nearMe ? (_nearbyShops ?? []) : allShops;
                   final filtered = shops.where((b) {
                     if (_category == null) return true;
                     final c = b['category'];
@@ -358,6 +412,7 @@ class _CustomerProfile extends ConsumerWidget {
                   .switchRole('entrepreneur');
               ref.invalidate(myBusinessesProvider);
               ref.invalidate(ordersProvider);
+              ref.invalidate(sellerOrdersProvider);
               if (context.mounted) {
                 context.go(hasBusiness ? '/seller' : '/seller/onboarding/business');
               }
