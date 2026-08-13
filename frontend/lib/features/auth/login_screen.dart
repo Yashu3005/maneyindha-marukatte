@@ -29,6 +29,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         final auth = ref.read(authProvider);
         if (auth.isAdmin) {
           context.go('/admin');
+        } else if (auth.role == 'delivery_partner') {
+          context.go('/delivery');
         } else if (auth.isEntrepreneur) {
           context.go('/seller');
         } else {

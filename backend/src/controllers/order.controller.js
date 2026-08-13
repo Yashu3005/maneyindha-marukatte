@@ -12,6 +12,6 @@ exports.myOrders = async (req, res, next) => {
 };
 
 exports.updateStatus = async (req, res, next) => {
-  try { ok(res, await orderService.transition(req.params.id, req.body.status, req.user)); }
+  try { ok(res, await orderService.transition(req.params.id, req.body.status, req.user, req.body.otp)); }
   catch (e) { next(e); }
 };

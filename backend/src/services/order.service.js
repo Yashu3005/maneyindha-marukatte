@@ -3,14 +3,20 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Cart = require('../models/Cart');
 const Coupon = require('../models/Coupon');
+const User = require('../models/User');
+const Notification = require('../models/Notification');
 const AppError = require('../utils/AppError');
 const cartService = require('./cart.service');
 const { VALID_TRANSITIONS } = require('../models/Order');
 
-exports.createOrder = async (customerId, { businessId, items, deliveryAddress, isSelfPickup, notes, couponCode }) => {
+async function notify(userId, type, title, body, data) {
+  try { await Notification.create({ user: userId, type, title, body, data }); }
+  catch { /* notifications must never break the main flow */ }
+}
+
+exports.createOrder = async (customerId, { businessId, items, deliveryAddress, isSelfPickup, notes, couponCode, useCoins }) => {
   if (!items?.length) throw new AppError('Order must contain at least one item', 422);
 
-  // Server-side pricing — never trust client totals.
   const products = await Product.find({ _id: { $in: items.map((i) => i.productId) }, business: businessId, isActive: true });
   const byId = Object.fromEntries(products.map((p) => [String(p._id), p]));
 
@@ -23,7 +29,6 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
     return { product: p._id, name: p.name, unitPrice: p.price, quantity: i.quantity };
   });
 
-  // Coupon: re-validated at checkout (cart may hold a stale one)
   let discount = 0;
   let appliedCoupon;
   if (couponCode) {
@@ -33,10 +38,19 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
     await Coupon.updateOne({ _id: coupon._id }, { $inc: { usedCount: 1 } });
   }
 
-  const deliveryFee = isSelfPickup ? 0 : 30; // TODO: distance-based in Phase 9
-  const total = subtotal - discount + deliveryFee;
+  // Loyalty coins: 1 coin = ₹1, redeemable against the item total.
+  let coinsUsed = 0;
+  if (useCoins) {
+    const user = await User.findById(customerId);
+    coinsUsed = Math.min(user?.coins || 0, Math.max(subtotal - discount, 0));
+    if (coinsUsed > 0) {
+      await User.updateOne({ _id: customerId, coins: { $gte: coinsUsed } }, { $inc: { coins: -coinsUsed } });
+    }
+  }
 
-  // Decrement stock atomically per item
+  const deliveryFee = isSelfPickup ? 0 : 30;
+  const total = subtotal - discount - coinsUsed + deliveryFee;
+
   for (const item of orderItems) {
     const updated = await Product.updateOne(
       { _id: item.product, stock: { $gte: item.quantity } },
@@ -50,42 +64,59 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
     customer: customerId,
     business: businessId,
     items: orderItems,
-    amounts: { subtotal, deliveryFee, discount, tax: 0, total },
+    amounts: { subtotal, deliveryFee, discount: discount + coinsUsed, tax: 0, total },
     coupon: appliedCoupon,
+    coinsUsed,
     deliveryAddress,
+    deliveryOtp: String(crypto.randomInt(1000, 9999)),
     isSelfPickup: !!isSelfPickup,
     notes,
     statusHistory: [{ status: 'pending', at: new Date() }],
   });
 
-  // Clear cart after successful order
   await Cart.findOneAndUpdate({ customer: customerId }, { items: [], business: undefined, coupon: undefined });
 
+  // Tell the shop owner
+  const Business = require('../models/Business');
+  const shop = await Business.findById(businessId).select('owner name');
+  if (shop) {
+    await notify(shop.owner, 'order', 'New order 🎉',
+      `${order.orderNumber} · ₹${total} for ${shop.name}`, { orderId: String(order._id) });
+  }
   return order;
 };
 
-// view: 'seller' = orders received by my shops; 'buyer' = orders I placed.
 exports.ordersForUser = async (user, view) => {
   let filter;
+  let query;
   if (user.role === 'delivery_partner') {
     filter = { deliveryPartner: user.id };
+    query = Order.find(filter);
   } else if (view === 'seller' && user.role === 'entrepreneur') {
     const Business = require('../models/Business');
     const owned = await Business.find({ owner: user.id }).select('_id');
     filter = { business: { $in: owned.map((b) => b._id) } };
+    query = Order.find(filter);
   } else {
     filter = { customer: user.id };
+    // Buyers see their delivery OTP to hand to the partner.
+    query = Order.find(filter).select('+deliveryOtp');
   }
-  return Order.find(filter).sort('-createdAt').limit(50).populate('business', 'name');
+  return query.sort('-createdAt').limit(50).populate('business', 'name');
 };
 
-// Which statuses each role may set. Only the shop that received the
-// order (its owner account) can accept/progress it.
-const SELLER_SET = ['confirmed', 'rejected', 'preparing', 'ready', 'picked_up', 'out_for_delivery', 'delivered'];
+const SELLER_SET = ['confirmed', 'rejected', 'preparing', 'ready'];
+const FULFILL_SET = ['picked_up', 'out_for_delivery', 'delivered'];
 const CUSTOMER_SET = ['cancelled'];
+const STATUS_LABEL = {
+  confirmed: 'Your order was confirmed', preparing: 'Your order is being prepared',
+  ready: 'Your order is ready', picked_up: 'Your order was picked up',
+  out_for_delivery: 'Your order is out for delivery', delivered: 'Your order was delivered 🎉',
+  rejected: 'Your order was rejected', cancelled: 'Order cancelled',
+};
 
-exports.transition = async (orderId, nextStatus, user) => {
-  const order = await Order.findById(orderId);
+exports.transition = async (orderId, nextStatus, user, otp) => {
+  const order = await Order.findById(orderId).select('+deliveryOtp');
   if (!order) throw new AppError('Order not found', 404);
 
   const allowed = VALID_TRANSITIONS[order.status] || [];
@@ -98,8 +129,23 @@ exports.transition = async (orderId, nextStatus, user) => {
     if (SELLER_SET.includes(nextStatus)) {
       const Business = require('../models/Business');
       const ownsShop = await Business.exists({ _id: order.business, owner: user.id });
-      if (!ownsShop) {
-        throw new AppError('Only the shop that received this order can update it', 403);
+      if (!ownsShop) throw new AppError('Only the shop that received this order can update it', 403);
+    } else if (FULFILL_SET.includes(nextStatus)) {
+      if (order.deliveryPartner) {
+        // A partner took this delivery — only they can progress it.
+        if (String(order.deliveryPartner) !== String(user.id)) {
+          throw new AppError('Only the assigned delivery partner can update this order', 403);
+        }
+        if (nextStatus === 'delivered') {
+          if (!otp || otp !== order.deliveryOtp) {
+            throw new AppError('Delivery OTP incorrect — ask the customer for their code', 422);
+          }
+        }
+      } else {
+        // No partner (self pickup / shop delivers): the shop handles it.
+        const Business = require('../models/Business');
+        const ownsShop = await Business.exists({ _id: order.business, owner: user.id });
+        if (!ownsShop) throw new AppError('Only the shop that received this order can update it', 403);
       }
     } else if (CUSTOMER_SET.includes(nextStatus)) {
       if (String(order.customer) !== String(user.id)) {
@@ -113,5 +159,19 @@ exports.transition = async (orderId, nextStatus, user) => {
   order.status = nextStatus;
   order.statusHistory.push({ status: nextStatus, at: new Date(), by: user.id });
   await order.save();
+
+  await notify(order.customer, 'order',
+    STATUS_LABEL[nextStatus] || `Order ${nextStatus}`,
+    order.orderNumber, { orderId: String(order._id) });
+
+  // Loyalty: 2% of the total back as coins on delivery.
+  if (nextStatus === 'delivered') {
+    const earned = Math.floor((order.amounts.total || 0) * 0.02);
+    if (earned > 0) {
+      await User.updateOne({ _id: order.customer }, { $inc: { coins: earned } });
+      await notify(order.customer, 'reward', `You earned ${earned} coins 🪙`,
+        'Redeem them on your next order at checkout.', { orderId: String(order._id) });
+    }
+  }
   return order;
 };
