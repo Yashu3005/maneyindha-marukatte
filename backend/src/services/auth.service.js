@@ -13,8 +13,8 @@ function issueTokens(user) {
 }
 
 function sanitize(user) {
-  const { _id, name, email, phone, role, avatarUrl, language, username, profileComplete, addresses, bankAccount } = user;
-  return { id: _id, _id, name, email, phone, role, avatarUrl, language, username, profileComplete, addresses, bankAccount };
+  const { _id, name, email, phone, role, avatarUrl, language, username, profileComplete, addresses, bankAccount, coins } = user;
+  return { id: _id, _id, name, email, phone, role, avatarUrl, language, username, profileComplete, addresses, bankAccount, coins: coins || 0 };
 }
 
 exports.issueTokens = issueTokens;

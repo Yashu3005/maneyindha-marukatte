@@ -113,43 +113,18 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   String? _proofUrl;
   String? _photoUrl;
 
+  // Tapping a tile browses local storage directly.
   Future<String?> _pick(String query) async {
-    // Real document upload first (Cloudinary); sample images as fallback.
-    final choice = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Add document'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 'upload'),
-            child: const Row(children: [
-              Icon(Icons.upload_file), SizedBox(width: 8),
-              Text('Upload from device'),
-            ]),
-          ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, 'sample'),
-            child: const Row(children: [
-              Icon(Icons.image_search), SizedBox(width: 8),
-              Text('Use a sample image (demo)'),
-            ]),
-          ),
-        ],
-      ),
-    );
-    if (choice == null) return null;
-    if (choice == 'upload') {
-      try {
-        return await pickAndUploadImage();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(apiError(e))));
-        }
-        return null;
+    try {
+      return await pickAndUploadImage();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Upload failed: ${apiError(e)}'),
+            duration: const Duration(seconds: 4)));
       }
+      return null;
     }
-    return _pickSample(query);
   }
 
   Future<String?> _pickSample(String query) async {
@@ -187,8 +162,10 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     );
   }
 
-  Widget _uploadTile(String label, String? value, VoidCallback onTap) => Padding(
-        padding: const EdgeInsets.only(bottom: 18),
+  Widget _uploadTile(String label, String? value, VoidCallback onTap,
+          {VoidCallback? onSample}) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
           const SizedBox(height: 6),
@@ -218,6 +195,15 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
               ),
             ),
           ),
+          if (onSample != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: onSample,
+                child: Text('use a sample image (demo)',
+                    style: serif(12, weight: FontWeight.w400, color: MMColors.cream)),
+              ),
+            ),
         ]),
       );
 
@@ -237,15 +223,24 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         ),
         const SizedBox(height: 18),
         _uploadTile('$_identityType / ID Proof', _idUrl, () async {
-          final u = await _pick('identity card document');
+          final u = await _pick('identity');
+          if (u != null) setState(() => _idUrl = u);
+        }, onSample: () async {
+          final u = await _pickSample('identity card document');
           if (u != null) setState(() => _idUrl = u);
         }),
         _uploadTile('Business Proof', _proofUrl, () async {
-          final u = await _pick('business certificate document');
+          final u = await _pick('proof');
+          if (u != null) setState(() => _proofUrl = u);
+        }, onSample: () async {
+          final u = await _pickSample('business certificate document');
           if (u != null) setState(() => _proofUrl = u);
         }),
         _uploadTile('Business Profile Photo', _photoUrl, () async {
-          final u = await _pick('woman small business shop');
+          final u = await _pick('photo');
+          if (u != null) setState(() => _photoUrl = u);
+        }, onSample: () async {
+          final u = await _pickSample('woman small business shop');
           if (u != null) setState(() => _photoUrl = u);
         }),
         const SizedBox(height: 8),

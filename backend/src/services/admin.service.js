@@ -7,7 +7,7 @@ exports.listVerificationRequests = async ({ status = 'pending', page = 1, limit 
   const [items, total] = await Promise.all([
     Business.find(filter).sort('createdAt')
       .skip((page - 1) * limit).limit(Number(limit))
-      .populate('owner', 'name email phone'),
+      .populate('owner', 'name email phone isActive'),
     Business.countDocuments(filter),
   ]);
   return { items, meta: { page: Number(page), limit: Number(limit), total } };

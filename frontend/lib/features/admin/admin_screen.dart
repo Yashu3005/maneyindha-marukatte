@@ -51,6 +51,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
   Future<void> _blockOwner(String userId, bool block) async {
     try {
       await ApiClient.dio.patch('/admin/users/$userId/active', data: {'isActive': !block});
+      ref.invalidate(adminBusinessesProvider);
       if (mounted) {
         Navigator.of(context, rootNavigator: true).maybePop();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -148,21 +149,23 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                     child: const Text('Request info')),
               ]),
             const SizedBox(height: 6),
-            Row(children: [
-              TextButton.icon(
-                icon: const Icon(Icons.block, size: 18),
-                label: const Text('Block owner account'),
-                onPressed: owner['_id'] == null
-                    ? null
-                    : () => _blockOwner(owner['_id'].toString(), true),
-              ),
-              TextButton(
-                onPressed: owner['_id'] == null
-                    ? null
-                    : () => _blockOwner(owner['_id'].toString(), false),
-                child: const Text('Unblock'),
-              ),
-            ]),
+            Builder(builder: (_) {
+              final blocked = owner['isActive'] == false;
+              return Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: Icon(blocked ? Icons.lock_open : Icons.block, size: 18),
+                  label: Text(blocked
+                      ? 'Unblock owner account'
+                      : 'Block owner account'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: blocked ? Colors.teal : Colors.red[700]),
+                  onPressed: owner['_id'] == null
+                      ? null
+                      : () => _blockOwner(owner['_id'].toString(), !blocked),
+                ),
+              );
+            }),
           ]),
         ),
       ),
