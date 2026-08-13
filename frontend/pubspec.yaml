@@ -1,0 +1,25 @@
+name: maneyindha_marukatte
+description: Localized marketplace for home-based women entrepreneurs.
+publish_to: "none"
+version: 0.2.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+# Slimmed for Phase 4 (web MVP). Firebase, Razorpay, Maps return in
+# Phases 8-10 when those integrations are configured.
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  go_router: ^14.1.0
+  dio: ^5.4.3
+  shared_preferences: ^2.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
