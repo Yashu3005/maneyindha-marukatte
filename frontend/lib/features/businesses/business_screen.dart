@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../services/api_client.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
 
@@ -16,7 +17,7 @@ class BusinessScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Shop')),
       body: business.when(
         loading: () => const LoadingView(),
-        error: (e, _) => const ErrorView(message: 'Could not load this shop.'),
+        error: (e, _) => ErrorView(message: 'Could not load this shop.'),
         data: (b) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -32,6 +33,28 @@ class BusinessScreen extends ConsumerWidget {
                     style: Theme.of(context).textTheme.headlineSmall),
               ),
               const Icon(Icons.verified, color: Colors.teal),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.favorite_outline, size: 18),
+                label: const Text('Follow'),
+                onPressed: () async {
+                  try {
+                    final res = await ApiClient.dio
+                        .post('/wishlist/businesses', data: {'businessId': id});
+                    final following = (res.data['data'] as Map)['following'] == true;
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(following ? 'Following this shop ♡' : 'Unfollowed'),
+                          duration: const Duration(seconds: 2)));
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(apiError(e))));
+                    }
+                  }
+                },
+              ),
             ]),
             const SizedBox(height: 8),
             Text(b['description']?.toString() ?? ''),
@@ -48,7 +71,7 @@ class BusinessScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             products.when(
               loading: () => const LoadingView(),
-              error: (e, _) => const ErrorView(message: 'Could not load products.'),
+              error: (e, _) => ErrorView(message: 'Could not load products.'),
               data: (items) => items.isEmpty
                   ? const EmptyView(message: 'No products listed yet.')
                   : GridView.builder(

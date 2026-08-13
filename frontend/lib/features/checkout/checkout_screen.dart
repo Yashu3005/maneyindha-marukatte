@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
+import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../shared/widgets.dart';
@@ -19,6 +20,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   bool _selfPickup = false;
   bool _placing = false;
   bool _payOnline = false;
+  bool _useCoins = false;
 
   Future<void> _placeOrder(Map<String, dynamic> cart) async {
     setState(() => _placing = true);
@@ -43,6 +45,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             'pincode': _pincode.text.trim(),
           },
         if (cart['coupon'] != null) 'couponCode': cart['coupon'],
+        'useCoins': _useCoins,
       });
       final orderId = (orderRes.data['data'] as Map)['_id'].toString();
 
@@ -138,6 +141,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       ]),
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  Consumer(builder: (c, r, _) {
+                    final coins = (r.watch(authProvider).user?['coins'] ?? 0) as num;
+                    if (coins <= 0) return const SizedBox.shrink();
+                    return SwitchListTile(
+                      title: Text('Use my coins (🪙 $coins = ₹$coins off)'),
+                      value: _useCoins,
+                      onChanged: (v) => setState(() => _useCoins = v),
+                    );
+                  }),
                   const SizedBox(height: 12),
                   Text('Payment', style: Theme.of(context).textTheme.titleLarge),
                   RadioListTile<bool>(
