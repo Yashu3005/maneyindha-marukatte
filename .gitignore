@@ -1,0 +1,26 @@
+# Node
+node_modules/
+npm-debug.log*
+coverage/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+serviceAccountKey.json
+
+# Flutter
+frontend/.dart_tool/
+frontend/build/
+frontend/.flutter-plugins*
+frontend/ios/Pods/
+frontend/android/.gradle/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Docker
+*.local.yml
