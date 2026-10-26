@@ -45,6 +45,37 @@ exports.create = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+exports.update = async (req, res, next) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product || !product.isActive) throw new AppError('Product not found', 404);
+
+    const owned = await Business.findOne({ _id: product.business, owner: req.user.id });
+    if (!owned) throw new AppError('You can only edit products belonging to your shop', 403);
+
+    const { name, description, category, price, stock, unit, images, isHandmade } = req.body;
+    if (name !== undefined) product.name = name.trim();
+    if (description !== undefined) product.description = description.trim();
+    if (category !== undefined) product.category = category;
+    if (price !== undefined) {
+      const p = Number(price);
+      if (isNaN(p) || p < 0) throw new AppError('Price must be a valid positive number', 422);
+      product.price = p;
+    }
+    if (stock !== undefined) {
+      const s = Number(stock);
+      if (isNaN(s) || s < 0) throw new AppError('Stock must be a valid non-negative number', 422);
+      product.stock = s;
+    }
+    if (unit !== undefined) product.unit = unit;
+    if (images !== undefined) product.images = images;
+    if (isHandmade !== undefined) product.isHandmade = Boolean(isHandmade);
+
+    await product.save();
+    ok(res, product);
+  } catch (e) { next(e); }
+};
+
 exports.remove = async (req, res, next) => {
   try {
     const product = await Product.findById(req.params.id);

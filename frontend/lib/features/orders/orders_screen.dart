@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/auth_state.dart';
+import '../../services/api_client.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
@@ -223,13 +224,7 @@ class OrdersScreen extends ConsumerWidget {
                                 ),
                                 icon: const Icon(Icons.star_outline_rounded, size: 16),
                                 label: const Text('Rate Order'),
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Thank you! Reviews can be added on the shop page.'),
-                                    ),
-                                  );
-                                },
+                                onPressed: () => _showReviewDialog(context, o, ref),
                               )
                             else
                               Text(
@@ -281,6 +276,144 @@ class OrdersScreen extends ConsumerWidget {
           );
         }
       }),
+    );
+  }
+
+  Future<void> _showReviewDialog(
+    BuildContext context,
+    Map<String, dynamic> order,
+    WidgetRef ref,
+  ) async {
+    final items = (order['items'] as List?) ?? [];
+    if (items.isEmpty) return;
+
+    String selectedProductId = (items.first as Map)['product']?.toString() ?? '';
+    String selectedProductName = (items.first as Map)['name']?.toString() ?? 'Product';
+    int rating = 5;
+    final commentController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.star_rounded, color: MMColors.terracotta, size: 24),
+                const SizedBox(width: 8),
+                Text('Rate Your Order', style: serif(18, weight: FontWeight.w700)),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (items.length > 1) ...[
+                      Text('Select Item to Review:', style: sans(13, weight: FontWeight.w600)),
+                      const SizedBox(height: 6),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedProductId,
+                        decoration: const InputDecoration(isDense: true),
+                        items: items.map((i) {
+                          final itemMap = i as Map;
+                          final pId = itemMap['product']?.toString() ?? '';
+                          final pName = itemMap['name']?.toString() ?? 'Item';
+                          return DropdownMenuItem(value: pId, child: Text(pName));
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedProductId = val;
+                              final match = items.firstWhere(
+                                (it) => (it as Map)['product']?.toString() == val,
+                                orElse: () => items.first,
+                              ) as Map;
+                              selectedProductName = match['name']?.toString() ?? 'Product';
+                            });
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 14),
+                    ] else ...[
+                      Text(
+                        selectedProductName,
+                        style: sans(14, weight: FontWeight.w700, color: MMColors.deepOlive),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    Text('Your Rating:', style: sans(13, weight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        final star = index + 1;
+                        return IconButton(
+                          iconSize: 32,
+                          icon: Icon(
+                            star <= rating ? Icons.star_rounded : Icons.star_border_rounded,
+                            color: star <= rating ? const Color(0xFFE68A00) : Colors.grey,
+                          ),
+                          onPressed: () => setDialogState(() => rating = star),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: commentController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Share your feedback (optional)',
+                        hintText: 'Taste, packaging, hygiene, craftsmanship...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: MMColors.deepOlive),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await ApiClient.dio.post('/reviews', data: {
+                      'orderId': order['_id'],
+                      'productId': selectedProductId,
+                      'rating': rating,
+                      'comment': commentController.text.trim(),
+                    });
+                    ref.invalidate(productReviewsProvider(selectedProductId));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Thank you! Your verified review has been published ⭐'),
+                          backgroundColor: MMColors.deepOlive,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(apiError(e))),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Submit Review'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

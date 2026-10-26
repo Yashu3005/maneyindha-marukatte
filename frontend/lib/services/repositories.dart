@@ -67,6 +67,12 @@ final businessReviewsProvider =
   return _asList(res.data['data']);
 });
 
+final productReviewsProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, id) async {
+  final res = await ApiClient.dio.get('/reviews/product/$id');
+  return _asList(res.data['data']);
+});
+
 final wishlistProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final res = await ApiClient.dio.get('/wishlist');
   return _asMap(res.data['data']);

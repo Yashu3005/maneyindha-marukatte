@@ -3,8 +3,12 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Cart = require('../models/Cart');
 const Coupon = require('../models/Coupon');
+const User = require('../models/User');
+const Business = require('../models/Business');
 const AppError = require('../utils/AppError');
+const logger = require('../utils/logger');
 const cartService = require('./cart.service');
+const emailService = require('./email.service');
 const { VALID_TRANSITIONS } = require('../models/Order');
 
 exports.createOrder = async (customerId, { businessId, items, deliveryAddress, isSelfPickup, notes, couponCode, paymentMethod = 'cod' }) => {
@@ -65,6 +69,39 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
   // Clear cart after successful order
   await Cart.findOneAndUpdate({ customer: customerId }, { items: [], business: undefined, coupon: undefined });
 
+  // Trigger non-blocking email notifications
+  (async () => {
+    try {
+      const [customer, business] = await Promise.all([
+        User.findById(customerId).select('name email'),
+        Business.findById(businessId).populate('owner', 'name email'),
+      ]);
+
+      if (customer?.email) {
+        await emailService.sendOrderConfirmationEmail({
+          to: customer.email,
+          customerName: customer.name,
+          orderNumber: order.orderNumber,
+          items: orderItems,
+          amounts: order.amounts,
+          deliveryAddress,
+        });
+      }
+
+      if (business?.owner?.email) {
+        await emailService.sendSellerNewOrderEmail({
+          to: business.owner.email,
+          sellerName: business.owner.name,
+          orderNumber: order.orderNumber,
+          items: orderItems,
+          amounts: order.amounts,
+        });
+      }
+    } catch (notifErr) {
+      logger.warn('Failed to send order placement notification emails: ' + notifErr.message);
+    }
+  })();
+
   return order;
 };
 
@@ -95,5 +132,24 @@ exports.transition = async (orderId, nextStatus, user) => {
   order.status = nextStatus;
   order.statusHistory.push({ status: nextStatus, at: new Date(), by: user.id });
   await order.save();
+
+  // Trigger non-blocking status email
+  (async () => {
+    try {
+      const customer = await User.findById(order.customer).select('name email');
+      if (customer?.email) {
+        await emailService.sendOrderStatusEmail({
+          to: customer.email,
+          customerName: customer.name,
+          orderNumber: order.orderNumber,
+          newStatus: nextStatus,
+          trackingNotes: order.notes,
+        });
+      }
+    } catch (notifErr) {
+      logger.warn('Failed to send order status notification email: ' + notifErr.message);
+    }
+  })();
+
   return order;
 };

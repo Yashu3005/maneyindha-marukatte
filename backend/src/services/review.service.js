@@ -9,24 +9,31 @@ exports.createReview = async (customerId, { productId, orderId, rating, comment,
   const product = await Product.findOne({ _id: productId, isActive: true });
   if (!product) throw new AppError('Product not found', 404);
 
-  // Verified purchase check: order must be delivered, belong to this customer,
-  // and contain this product.
-  let isVerifiedPurchase = false;
-  if (orderId) {
+  // Verified purchase requirement: Order must be delivered, belong to this customer, and contain this product.
+  let targetOrderId = orderId;
+  if (targetOrderId) {
     const order = await Order.findOne({
-      _id: orderId, customer: customerId, status: 'delivered', 'items.product': productId,
+      _id: targetOrderId, customer: customerId, status: 'delivered', 'items.product': productId,
     });
     if (!order) throw new AppError('No delivered order found for this product', 422);
-    isVerifiedPurchase = true;
+  } else {
+    // If orderId is omitted (e.g. from product details page), automatically locate an eligible delivered order
+    const deliveredOrder = await Order.findOne({
+      customer: customerId, status: 'delivered', 'items.product': productId,
+    }).sort('-createdAt');
+    if (!deliveredOrder) {
+      throw new AppError('Verified purchase required: You can only review products from delivered orders', 403);
+    }
+    targetOrderId = deliveredOrder._id;
   }
 
   const review = await Review.create({
     customer: customerId,
     business: product.business,
     product: productId,
-    order: orderId,
+    order: targetOrderId,
     rating, comment, images,
-    isVerifiedPurchase,
+    isVerifiedPurchase: true,
   }).catch((e) => {
     if (e.code === 11000) throw new AppError('You have already reviewed this product for this order', 409);
     throw e;

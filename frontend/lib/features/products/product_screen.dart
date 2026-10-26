@@ -107,6 +107,12 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
   Widget build(BuildContext context) {
     final productAsync = ref.watch(productProvider(widget.id));
     final isDesktop = Breakpoints.isDesktop(context);
+    final wishlistAsync = ref.watch(wishlistProvider);
+    final inWishlist = wishlistAsync.asData?.value['products'] is List &&
+        (wishlistAsync.asData!.value['products'] as List).any((p) {
+          if (p is Map) return p['_id']?.toString() == widget.id;
+          return p.toString() == widget.id;
+        });
 
     return Scaffold(
       appBar: AppBar(
@@ -119,8 +125,11 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.favorite_border_rounded),
-            tooltip: 'Save to Wishlist',
+                : Icon(
+                    inWishlist ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                    color: inWishlist ? MMColors.terracotta : null,
+                  ),
+            tooltip: inWishlist ? 'Remove from Wishlist' : 'Save to Wishlist',
             onPressed: _toggleWishlist,
           ),
           IconButton(
@@ -396,6 +405,33 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
             ),
           ),
         ),
+        const SizedBox(height: 36),
+        const Divider(),
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Customer Reviews', style: serif(20, weight: FontWeight.w700)),
+                Text(
+                  (rating['count'] != null && (rating['count'] as num) > 0)
+                      ? '★ ${rating['avg']} · ${rating['count']} verified reviews'
+                      : 'No reviews yet',
+                  style: sans(13, color: MMColors.textMuted),
+                ),
+              ],
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.rate_review_outlined, size: 16),
+              label: const Text('Write Review'),
+              onPressed: () => _showWriteReviewDialog(context, p),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildProductReviews(widget.id),
       ],
     );
   }
@@ -409,6 +445,237 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
           child: Text(text, style: sans(13, color: MMColors.textPrimary)),
         ),
       ],
+    );
+  }
+
+  Widget _buildProductReviews(String productId) {
+    final reviewsAsync = ref.watch(productReviewsProvider(productId));
+    return reviewsAsync.when(
+      loading: () => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: CircularProgressIndicator(),
+        ),
+      ),
+      error: (_, __) => const SizedBox(),
+      data: (reviews) {
+        if (reviews.isEmpty) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: MMColors.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: MMColors.sand),
+            ),
+            child: Column(
+              children: [
+                const Icon(Icons.star_outline_rounded, size: 36, color: MMColors.muted),
+                const SizedBox(height: 8),
+                Text(
+                  'No reviews yet for this homemade item.',
+                  style: sans(13, color: MMColors.textSecondary),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Verified customers can leave a review after order delivery.',
+                  style: sans(12, color: MMColors.textMuted),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return Column(
+          children: reviews.map((r) {
+            final customer = (r['customer'] as Map?) ?? {};
+            final customerName = customer['name']?.toString() ?? 'Verified Customer';
+            final comment = r['comment']?.toString() ?? '';
+            final ratingVal = (r['rating'] as num?)?.toInt() ?? 5;
+            final isVerified = r['isVerifiedPurchase'] == true;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: MMColors.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: MMColors.sand),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 14,
+                            backgroundColor: MMColors.sageLight,
+                            child: Text(
+                              customerName.isNotEmpty ? customerName[0].toUpperCase() : 'C',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: MMColors.deepOlive,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(customerName, style: sans(14, weight: FontWeight.w600)),
+                          if (isVerified) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F5E9),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Verified Buyer ✓',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF2E7D32),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      Row(
+                        children: List.generate(
+                          5,
+                          (i) => Icon(
+                            i < ratingVal ? Icons.star_rounded : Icons.star_border_rounded,
+                            size: 16,
+                            color: const Color(0xFFE68A00),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (comment.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      comment,
+                      style: sans(14, color: MMColors.textPrimary, height: 1.4),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  Future<void> _showWriteReviewDialog(BuildContext context, Map<String, dynamic> product) async {
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn) {
+      context.push('/login');
+      return;
+    }
+
+    int rating = 5;
+    final commentController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.star_rounded, color: MMColors.terracotta, size: 24),
+                const SizedBox(width: 8),
+                Text('Write a Review', style: serif(18, weight: FontWeight.w700)),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product['name']?.toString() ?? 'Product',
+                      style: sans(14, weight: FontWeight.w700, color: MMColors.deepOlive),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Your Rating:', style: sans(13, weight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        final star = index + 1;
+                        return IconButton(
+                          iconSize: 32,
+                          icon: Icon(
+                            star <= rating ? Icons.star_rounded : Icons.star_border_rounded,
+                            color: star <= rating ? const Color(0xFFE68A00) : Colors.grey,
+                          ),
+                          onPressed: () => setDialogState(() => rating = star),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: commentController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Share your feedback',
+                        hintText: 'Taste, packaging, hygiene, craftsmanship...',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: MMColors.deepOlive),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    await ApiClient.dio.post('/reviews', data: {
+                      'productId': widget.id,
+                      'rating': rating,
+                      'comment': commentController.text.trim(),
+                    });
+                    ref.invalidate(productReviewsProvider(widget.id));
+                    ref.invalidate(productProvider(widget.id));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Thank you! Your verified review has been published ⭐'),
+                          backgroundColor: MMColors.deepOlive,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(apiError(e))),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Submit Review'),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

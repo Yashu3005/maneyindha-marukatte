@@ -566,6 +566,106 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
     }
   }
 
+  Future<void> _editProduct(Map<String, dynamic> product) async {
+    final id = product['_id']?.toString() ?? '';
+    final name = TextEditingController(text: product['name']?.toString() ?? '');
+    final price = TextEditingController(text: product['price']?.toString() ?? '');
+    final stock = TextEditingController(text: product['stock']?.toString() ?? '');
+    final description = TextEditingController(text: product['description']?.toString() ?? '');
+
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx2, setD) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: Text('Edit Product', style: serif(18, weight: FontWeight.w700)),
+            content: SizedBox(
+              width: 440,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: name,
+                      decoration: const InputDecoration(labelText: 'Product Name'),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: price,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Price (₹)',
+                              prefixText: '₹ ',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: stock,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Available Stock'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: description,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        hintText: 'Freshly made with traditional ingredients...',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Save Changes'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (updated != true) return;
+
+    try {
+      await ApiClient.dio.put('/products/$id', data: {
+        'name': name.text.trim(),
+        'price': num.tryParse(price.text) ?? 0,
+        'stock': num.tryParse(stock.text) ?? 0,
+        'description': description.text.trim(),
+      });
+      ref.invalidate(productsProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Product updated successfully ✓')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(apiError(e))),
+        );
+      }
+    }
+  }
+
   Future<void> _deleteProduct(String id, String name) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -743,16 +843,29 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
                                       ),
                                     ],
                                   ),
-                                  trailing: IconButton(
-                                    tooltip: 'Delete',
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      color: Color(0xFFC62828),
-                                    ),
-                                    onPressed: () => _deleteProduct(
-                                      p['_id'].toString(),
-                                      p['name']?.toString() ?? 'Product',
-                                    ),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        tooltip: 'Edit Product',
+                                        icon: const Icon(
+                                          Icons.edit_outlined,
+                                          color: MMColors.olive,
+                                        ),
+                                        onPressed: () => _editProduct(p),
+                                      ),
+                                      IconButton(
+                                        tooltip: 'Delete',
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          color: Color(0xFFC62828),
+                                        ),
+                                        onPressed: () => _deleteProduct(
+                                          p['_id'].toString(),
+                                          p['name']?.toString() ?? 'Product',
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               );

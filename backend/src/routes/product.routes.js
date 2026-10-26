@@ -5,6 +5,7 @@ const productController = require('../controllers/product.controller');
 router.get('/', productController.list);                    // ?q=&category=&page=&limit=&sort=
 router.get('/:id', productController.getById);
 router.post('/', requireAuth, requireRole('entrepreneur'), productController.create);
+router.put('/:id', requireAuth, requireRole('entrepreneur'), productController.update);
 router.delete('/:id', requireAuth, requireRole('entrepreneur'), productController.remove);
 
 module.exports = router;
