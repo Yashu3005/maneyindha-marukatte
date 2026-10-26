@@ -54,10 +54,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _apply(res.data['data'] as Map<String, dynamic>);
   }
 
-  Future<String?> sendOtp(String email) async {
-    final res = await ApiClient.dio.post('/auth/otp/send', data: {'email': email});
-    final data = Map<String, dynamic>.from(res.data['data'] as Map);
-    return data['demoOtp']?.toString();
+  Future<void> sendOtp(String email) async {
+    await ApiClient.dio.post('/auth/otp/send', data: {'email': email});
   }
 
   Future<bool> verifyOtp(String email, String otp) async {
