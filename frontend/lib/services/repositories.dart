@@ -72,6 +72,11 @@ final wishlistProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   return _asMap(res.data['data']);
 });
 
+final transactionsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final res = await ApiClient.dio.get('/payments/transactions');
+  return _asList(res.data['data']);
+});
+
 /// Scratch state carried through the seller onboarding steps.
 final sellerOnboardingProvider =
     StateProvider<Map<String, dynamic>>((ref) => {});

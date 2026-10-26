@@ -42,6 +42,306 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     }
   }
 
+  Future<void> _handleRazorpayFlow(Map<String, dynamic> orderData) async {
+
+    final orderId = orderData['_id']?.toString() ?? '';
+
+    final orderNumber = orderData['orderNumber']?.toString() ?? 'MM';
+
+    final totalAmount = (orderData['amounts'] as Map?)?['total'] ?? 0;
+
+
+
+    try {
+
+      final rzpRes = await ApiClient.dio.post('/payments/razorpay/create-order', data: {'orderId': orderId});
+
+      final rzpData = Map<String, dynamic>.from(rzpRes.data['data'] as Map);
+
+      final rzpOrderId = rzpData['razorpayOrderId']?.toString() ?? '';
+
+
+
+      if (!mounted) return;
+
+
+
+      final paid = await showDialog<bool>(
+
+        context: context,
+
+        barrierDismissible: false,
+
+        builder: (ctx) => AlertDialog(
+
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+
+          title: Row(
+
+            children: [
+
+              Container(
+
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+
+                decoration: BoxDecoration(
+
+                  color: const Color(0xFF0C2340),
+
+                  borderRadius: BorderRadius.circular(6),
+
+                ),
+
+                child: const Text('RAZORPAY',
+
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+
+              ),
+
+              const SizedBox(width: 8),
+
+              const Text('Test Checkout', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+
+            ],
+
+          ),
+
+          content: Column(
+
+            mainAxisSize: MainAxisSize.min,
+
+            crossAxisAlignment: CrossAxisAlignment.start,
+
+            children: [
+
+              Text('Order #$orderNumber', style: const TextStyle(fontWeight: FontWeight.w600, color: MMColors.muted)),
+
+              const SizedBox(height: 8),
+
+              Text(rupees(totalAmount), style: serif(26, color: MMColors.olive, weight: FontWeight.w700)),
+
+              const Divider(height: 24),
+
+              const Text('Select Test Payment Mode:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+
+              const SizedBox(height: 8),
+
+              const ListTile(
+
+                dense: true,
+
+                contentPadding: EdgeInsets.zero,
+
+                leading: Icon(Icons.qr_code_scanner, color: MMColors.olive),
+
+                title: Text('UPI (GPay / PhonePe / Paytm)'),
+
+                subtitle: Text('Simulate instant UPI authorization'),
+
+              ),
+
+              const ListTile(
+
+                dense: true,
+
+                contentPadding: EdgeInsets.zero,
+
+                leading: Icon(Icons.credit_card, color: MMColors.olive),
+
+                title: Text('Cards / NetBanking'),
+
+                subtitle: Text('Simulate bank card approval'),
+
+              ),
+
+            ],
+
+          ),
+
+          actions: [
+
+            TextButton(
+
+              onPressed: () => Navigator.pop(ctx, false),
+
+              child: const Text('Cancel Payment'),
+
+            ),
+
+            FilledButton(
+
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0C2340)),
+
+              onPressed: () => Navigator.pop(ctx, true),
+
+              child: Text('Pay ${rupees(totalAmount)} (Test)'),
+
+            ),
+
+          ],
+
+        ),
+
+      );
+
+
+
+      if (paid != true) {
+
+        if (mounted) {
+
+          ScaffoldMessenger.of(context).showSnackBar(
+
+            const SnackBar(content: Text('Payment cancelled. Your order remains pending in My Orders.')),
+
+          );
+
+          context.go('/orders');
+
+        }
+
+        return;
+
+      }
+
+
+
+      final paymentId = 'pay_test_${DateTime.now().millisecondsSinceEpoch}';
+
+      await ApiClient.dio.post('/payments/razorpay/verify', data: {
+
+        'orderId': orderId,
+
+        'razorpayOrderId': rzpOrderId,
+
+        'razorpayPaymentId': paymentId,
+
+      });
+
+
+
+      ref.invalidate(cartProvider);
+
+      ref.invalidate(ordersProvider);
+
+
+
+      if (mounted) {
+
+        showDialog(
+
+          context: context,
+
+          barrierDismissible: false,
+
+          builder: (ctx) => AlertDialog(
+
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+
+            content: Padding(
+
+              padding: const EdgeInsets.symmetric(vertical: 12),
+
+              child: Column(
+
+                mainAxisSize: MainAxisSize.min,
+
+                children: [
+
+                  Container(
+
+                    padding: const EdgeInsets.all(18),
+
+                    decoration: const BoxDecoration(
+
+                      color: MMColors.sageLight,
+
+                      shape: BoxShape.circle,
+
+                    ),
+
+                    child: const Icon(Icons.check_circle_rounded, size: 48, color: MMColors.deepOlive),
+
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  Text('Payment Successful! 🎉',
+
+                      textAlign: TextAlign.center,
+
+                      style: serif(20, weight: FontWeight.w700)),
+
+                  const SizedBox(height: 6),
+
+                  Text('Order #$orderNumber',
+
+                      style: sans(14, weight: FontWeight.w700, color: MMColors.deepOlive)),
+
+                  const SizedBox(height: 4),
+
+                  Text('Ref: $paymentId', style: const TextStyle(fontSize: 11, color: MMColors.muted)),
+
+                  const SizedBox(height: 12),
+
+                  const Text(
+
+                    'Your payment has been verified on the server. The home kitchen has received your order and will start preparing fresh.',
+
+                    textAlign: TextAlign.center,
+
+                    style: TextStyle(fontSize: 13, color: MMColors.textSecondary, height: 1.4),
+
+                  ),
+
+                ],
+
+              ),
+
+            ),
+
+            actions: [
+
+              FilledButton(
+
+                onPressed: () {
+
+                  Navigator.pop(ctx);
+
+                  context.go('/orders');
+
+                },
+
+                child: const Text('View in My Orders'),
+
+              ),
+
+            ],
+
+          ),
+
+        );
+
+      }
+
+    } catch (e) {
+
+      if (mounted) {
+
+        ScaffoldMessenger.of(context).showSnackBar(
+
+          SnackBar(content: Text('Payment error: ${apiError(e)}')),
+
+        );
+
+      }
+
+    }
+
+  }
+
+
+
   Future<void> _placeOrder(Map<String, dynamic> cart) async {
     final canPlace = _selfPickup ||
         (_line1.text.trim().isNotEmpty && _pincode.text.trim().isNotEmpty);
@@ -68,6 +368,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         'businessId': businessId,
         'items': items,
         'isSelfPickup': _selfPickup,
+        'paymentMethod': _paymentMethod,
         if (!_selfPickup)
           'deliveryAddress': {
             'line1': _line1.text.trim(),
@@ -80,6 +381,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       final orderData = res.data['data'] as Map<String, dynamic>;
       final orderNumber = orderData['orderNumber'] ?? 'MM';
+
+      if (_paymentMethod == 'razorpay') {
+        await _handleRazorpayFlow(orderData);
+        return;
+      }
 
       ref.invalidate(cartProvider);
       ref.invalidate(ordersProvider);
@@ -293,7 +599,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                         RadioListTile<String>(
                           value: 'razorpay',
                           groupValue: _paymentMethod,
-                          onChanged: null, // Disabled until Phase 4 live activation
+                          onChanged: (v) => setState(() => _paymentMethod = v ?? 'razorpay'),
+                          activeColor: MMColors.deepOlive,
                           title: Row(
                             children: [
                               const Text('Razorpay (Online UPI / Cards)'),
@@ -304,15 +611,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                                   color: MMColors.sageLight,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: Text('Phase 4',
+                                child: Text('TEST MODE',
                                     style: sans(10,
                                         weight: FontWeight.w700,
                                         color: MMColors.deepOlive)),
                               ),
                             ],
                           ),
-                          subtitle: const Text('Instant UPI, Google Pay, Cards (Test mode in Phase 4)'),
-                          secondary: const Icon(Icons.payment_rounded, color: MMColors.textMuted),
+                          subtitle: const Text('Instant UPI, Google Pay, Cards & NetBanking (Test Mode)'),
+                          secondary: const Icon(Icons.payment_rounded, color: MMColors.deepOlive),
                         ),
                       ],
                     ),
