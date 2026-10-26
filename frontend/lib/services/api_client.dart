@@ -25,7 +25,7 @@ class ApiClient {
 
   static final Dio dio = Dio(BaseOptions(
     baseUrl: const String.fromEnvironment('API_BASE_URL',
-        defaultValue: 'http://localhost:5050/api/v1'),
+        defaultValue: 'http://localhost:5000/api/v1'),
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 15),
   ))

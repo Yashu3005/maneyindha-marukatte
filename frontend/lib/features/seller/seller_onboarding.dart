@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
+import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
 import '../onboarding/onboarding_screens.dart';
 
@@ -27,7 +28,10 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   String? _error;
 
   Future<void> _next() async {
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final res = await ApiClient.dio.post('/businesses', data: {
         'name': _name.text.trim(),
@@ -56,45 +60,84 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   @override
   Widget build(BuildContext context) {
     final ready = _name.text.trim().isNotEmpty &&
-        _category != null && _years != null && _address.text.trim().isNotEmpty;
-    return OliveScaffold(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Center(child: Text('Business Information', style: serif(24, color: MMColors.cream))),
-        const SizedBox(height: 24),
-        Text('Business Name:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 6),
-        TextField(controller: _name, onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(hintText: 'Enter your business name')),
-        const SizedBox(height: 16),
-        Text('Business Category:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          value: _category,
-          hint: const Text('Select Category'),
-          items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-          onChanged: (v) => setState(() => _category = v),
-        ),
-        const SizedBox(height: 16),
-        Text('Years Of Experience:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          value: _years,
-          hint: const Text('Select Experience'),
-          items: _experience.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-          onChanged: (v) => setState(() => _years = v),
-        ),
-        const SizedBox(height: 16),
-        Text('Address:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 6),
-        TextField(controller: _address, onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(hintText: 'Enter your Address')),
-        if (_error != null) ...[
-          const SizedBox(height: 10),
-          Text(_error!, style: const TextStyle(color: Colors.amberAccent)),
+        _category != null &&
+        _years != null &&
+        _address.text.trim().isNotEmpty;
+
+    return ModernScaffold(
+      title: 'Business Setup',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Business Information', style: serif(24, weight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(
+            'Step 1 of 4: Tell us about your homemade specialty and experience.',
+            style: sans(14, color: MMColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _name,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Business / Shop Name',
+              hintText: 'e.g. Yashu’s Artisanal Bakes',
+              prefixIcon: Icon(Icons.storefront_outlined, size: 20),
+            ),
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            initialValue: _category,
+            hint: const Text('Select Business Category'),
+            items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+            onChanged: (v) => setState(() => _category = v),
+            decoration: const InputDecoration(
+              labelText: 'Category',
+              prefixIcon: Icon(Icons.category_outlined, size: 20),
+            ),
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            initialValue: _years,
+            hint: const Text('Select Experience'),
+            items: _experience.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+            onChanged: (v) => setState(() => _years = v),
+            decoration: const InputDecoration(
+              labelText: 'Years of Experience',
+              prefixIcon: Icon(Icons.timeline_rounded, size: 20),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _address,
+            maxLines: 2,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Kitchen / Workshop Address',
+              hintText: 'Location in Bengaluru where items are made',
+              prefixIcon: Icon(Icons.location_on_outlined, size: 20),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFECEC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFF5B5B5)),
+              ),
+              child: Text(_error!, style: sans(13, color: const Color(0xFFBA1A1A))),
+            ),
+          ],
+          const SizedBox(height: 28),
+          PrimaryButton(
+            label: 'Next — Upload Verification Proofs',
+            busy: _busy,
+            onTap: ready && !_busy ? _next : null,
+          ),
         ],
-        const SizedBox(height: 28),
-        CreamButton(label: _busy ? 'Saving…' : 'Next', onTap: (ready && !_busy) ? _next : null),
-      ]),
+      ),
     );
   }
 }
@@ -116,31 +159,48 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     return showDialog<String>(
       context: context,
       builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
+          constraints: const BoxConstraints(maxWidth: 440),
           child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Consumer(builder: (ctx2, ref2, _) {
-              final photos = ref2.watch(imagesProvider(query));
-              return photos.when(
-                loading: () => const SizedBox(
-                    height: 160, child: Center(child: CircularProgressIndicator())),
-                error: (e, _) => const SizedBox(
-                    height: 100, child: Center(child: Text('Could not load images'))),
-                data: (urls) => Wrap(
-                  spacing: 8, runSpacing: 8,
-                  children: urls
-                      .map((u) => GestureDetector(
-                            onTap: () => Navigator.pop(ctx, u),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(u, width: 110, height: 110, fit: BoxFit.cover),
-                            ),
-                          ))
-                      .toList(),
-                ),
-              );
-            }),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Select Photo Sample', style: serif(18, weight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text('Pick a photo sample to attach to your verification.',
+                    style: sans(13, color: MMColors.textSecondary)),
+                const SizedBox(height: 16),
+                Consumer(builder: (ctx2, ref2, _) {
+                  final photos = ref2.watch(imagesProvider(query));
+                  return photos.when(
+                    loading: () => const SizedBox(
+                      height: 160,
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    error: (e, _) => const SizedBox(
+                      height: 100,
+                      child: Center(child: Text('Could not load sample images')),
+                    ),
+                    data: (urls) => Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: urls
+                          .map((u) => GestureDetector(
+                                onTap: () => Navigator.pop(ctx, u),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.network(u, width: 95, height: 95, fit: BoxFit.cover),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  );
+                }),
+              ],
+            ),
           ),
         ),
       ),
@@ -148,85 +208,106 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   }
 
   Widget _uploadTile(String label, String? value, VoidCallback onTap) => Padding(
-        padding: const EdgeInsets.only(bottom: 18),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
-          const SizedBox(height: 6),
-          Material(
-            color: MMColors.cream,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: onTap,
-              child: SizedBox(
-                width: double.infinity, height: 82,
-                child: value == null
-                    ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.upload_outlined, color: MMColors.deepOlive),
-                        Text('Upload File', style: serif(14, weight: FontWeight.w400)),
-                      ])
-                    : Row(children: [
-                        ClipRRect(
-                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
-                          child: Image.network(value, width: 82, height: 82, fit: BoxFit.cover),
+        padding: const EdgeInsets.only(bottom: 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: sans(14, weight: FontWeight.w600, color: MMColors.textPrimary)),
+            const SizedBox(height: 6),
+            Card(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: onTap,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 80,
+                  child: value == null
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.cloud_upload_outlined, color: MMColors.deepOlive),
+                            const SizedBox(width: 10),
+                            Text('Attach File / Photo', style: sans(14, weight: FontWeight.w600)),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius:
+                                  const BorderRadius.horizontal(left: Radius.circular(16)),
+                              child: Image.network(value, width: 80, height: 80, fit: BoxFit.cover),
+                            ),
+                            const SizedBox(width: 14),
+                            const Icon(Icons.check_circle, color: MMColors.deepOlive),
+                            const SizedBox(width: 6),
+                            Text('Attached Successfully', style: sans(14, weight: FontWeight.w600)),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        const Icon(Icons.check_circle, color: MMColors.deepOlive),
-                        const SizedBox(width: 6),
-                        Text('Uploaded', style: serif(14)),
-                      ]),
+                ),
               ),
             ),
-          ),
-        ]),
+          ],
+        ),
       );
 
   @override
   Widget build(BuildContext context) {
     final ready = _idUrl != null && _proofUrl != null && _photoUrl != null;
-    return OliveScaffold(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Center(child: Text('Upload Documents', style: serif(24, color: MMColors.cream))),
-        const SizedBox(height: 20),
-        Text('Identity Type:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          value: _identityType,
-          items: _identityTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-          onChanged: (v) => setState(() => _identityType = v ?? _identityType),
-        ),
-        const SizedBox(height: 18),
-        _uploadTile('$_identityType / ID Proof', _idUrl, () async {
-          final u = await _pick('identity card document');
-          if (u != null) setState(() => _idUrl = u);
-        }),
-        _uploadTile('Business Proof', _proofUrl, () async {
-          final u = await _pick('business certificate document');
-          if (u != null) setState(() => _proofUrl = u);
-        }),
-        _uploadTile('Business Profile Photo', _photoUrl, () async {
-          final u = await _pick('woman small business shop');
-          if (u != null) setState(() => _photoUrl = u);
-        }),
-        const SizedBox(height: 8),
-        CreamButton(
-          label: 'Next',
-          onTap: !ready ? null : () {
-            final data = Map<String, dynamic>.from(ref.read(sellerOnboardingProvider));
-            data['identityType'] = _identityType;
-            data['idUrl'] = _idUrl;
-            data['proofUrl'] = _proofUrl;
-            data['photoUrl'] = _photoUrl;
-            ref.read(sellerOnboardingProvider.notifier).state = data;
-            context.push('/seller/onboarding/review');
-          },
-        ),
-      ]),
+
+    return ModernScaffold(
+      title: 'Verification Proofs',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Upload Verification Proofs', style: serif(24, weight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(
+            'Step 2 of 4: All sellers are verified by our team to protect customer safety.',
+            style: sans(14, color: MMColors.textSecondary),
+          ),
+          const SizedBox(height: 20),
+          DropdownButtonFormField<String>(
+            initialValue: _identityType,
+            items: _identityTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+            onChanged: (v) => setState(() => _identityType = v ?? _identityType),
+            decoration: const InputDecoration(labelText: 'Government ID Type'),
+          ),
+          const SizedBox(height: 18),
+          _uploadTile('$_identityType Proof (Photo of ID)', _idUrl, () async {
+            final u = await _pick('identity card document');
+            if (u != null) setState(() => _idUrl = u);
+          }),
+          _uploadTile('Business / Kitchen Sample Photo', _proofUrl, () async {
+            final u = await _pick('kitchen baking bakery work');
+            if (u != null) setState(() => _proofUrl = u);
+          }),
+          _uploadTile('Entrepreneur Profile Photo', _photoUrl, () async {
+            final u = await _pick('indian woman entrepreneur');
+            if (u != null) setState(() => _photoUrl = u);
+          }),
+          const SizedBox(height: 16),
+          PrimaryButton(
+            label: 'Next — Review Application',
+            onTap: !ready
+                ? null
+                : () {
+                    final data =
+                        Map<String, dynamic>.from(ref.read(sellerOnboardingProvider));
+                    data['identityType'] = _identityType;
+                    data['idUrl'] = _idUrl;
+                    data['proofUrl'] = _proofUrl;
+                    data['photoUrl'] = _photoUrl;
+                    ref.read(sellerOnboardingProvider.notifier).state = data;
+                    context.push('/seller/onboarding/review');
+                  },
+          ),
+        ],
+      ),
     );
   }
 }
 
-// ---------------- Step 3: Review + terms → Submit ----------------
+// ---------------- Step 3: Review + Terms → Submit ----------------
 class ReviewDetailsScreen extends ConsumerStatefulWidget {
   const ReviewDetailsScreen({super.key});
   @override
@@ -254,8 +335,9 @@ class _ReviewDetailsScreenState extends ConsumerState<ReviewDetailsScreen> {
       if (mounted) context.go('/seller/onboarding/submitted');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(apiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(apiError(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -263,81 +345,126 @@ class _ReviewDetailsScreenState extends ConsumerState<ReviewDetailsScreen> {
   }
 
   Widget _row(String label, String? value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(width: 110, child: Text('$label:', style: serif(14))),
-          Expanded(child: Text(value ?? '-', style: serif(14, weight: FontWeight.w400))),
-        ]),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 120,
+              child: Text(label, style: sans(14, color: MMColors.textMuted)),
+            ),
+            Expanded(
+              child: Text(value ?? '-', style: sans(14, weight: FontWeight.w600)),
+            ),
+          ],
+        ),
       );
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final data = ref.watch(sellerOnboardingProvider);
-    return OliveScaffold(
-      child: Column(children: [
-        Text('Review Your Details', style: serif(24, color: MMColors.cream)),
-        const SizedBox(height: 20),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: MMColors.cream,
-            borderRadius: BorderRadius.circular(14),
+
+    return ModernScaffold(
+      title: 'Review Application',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Review Your Details', style: serif(24, weight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(
+            'Step 3 of 4: Verify your information before submitting for admin review.',
+            style: sans(14, color: MMColors.textSecondary),
           ),
-          child: Column(children: [
-            _row('Name', auth.name),
-            _row('Business', data['businessName']?.toString()),
-            _row('Category', data['category']?.toString()),
-            _row('Experience', data['years']?.toString()),
-            _row('Address', data['address']?.toString()),
-            _row('Identity', data['identityType']?.toString()),
-          ]),
-        ),
-        const SizedBox(height: 16),
-        CheckboxListTile(
-          value: _agreed,
-          onChanged: (v) => setState(() => _agreed = v ?? false),
-          controlAffinity: ListTileControlAffinity.leading,
-          checkColor: MMColors.deepOlive,
-          activeColor: MMColors.cream,
-          title: Text('I agree to the terms and conditions',
-              style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
-        ),
-        const SizedBox(height: 12),
-        CreamButton(
-            label: _busy ? 'Submitting…' : 'Submit',
-            onTap: (_agreed && !_busy) ? _submit : null),
-      ]),
+          const SizedBox(height: 20),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  _row('Applicant Name', auth.name),
+                  const Divider(height: 12),
+                  _row('Business Name', data['businessName']?.toString()),
+                  const Divider(height: 12),
+                  _row('Category', data['category']?.toString()),
+                  const Divider(height: 12),
+                  _row('Experience', data['years']?.toString()),
+                  const Divider(height: 12),
+                  _row('Address', data['address']?.toString()),
+                  const Divider(height: 12),
+                  _row('ID Proof', data['identityType']?.toString()),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          CheckboxListTile(
+            value: _agreed,
+            onChanged: (v) => setState(() => _agreed = v ?? false),
+            controlAffinity: ListTileControlAffinity.leading,
+            activeColor: MMColors.deepOlive,
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              'I agree to adhere to home kitchen hygiene and authentic marketplace standards.',
+              style: sans(13, color: MMColors.textPrimary),
+            ),
+          ),
+          const SizedBox(height: 20),
+          PrimaryButton(
+            label: 'Submit Application',
+            busy: _busy,
+            onTap: _agreed && !_busy ? _submit : null,
+          ),
+        ],
+      ),
     );
   }
 }
 
-// ---------------- Step 4: Submitted + Status ----------------
+// ---------------- Step 4: Submitted & Application Status ----------------
 class SubmittedScreen extends StatelessWidget {
   const SubmittedScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    return OliveScaffold(
+    return ModernScaffold(
       showBack: false,
-      child: Column(children: [
-        const CircleAvatar(
-          radius: 44,
-          backgroundColor: MMColors.cream,
-          child: Icon(Icons.check_rounded, size: 52, color: MMColors.deepOlive),
-        ),
-        const SizedBox(height: 24),
-        Text('Application Submitted!!!', style: serif(24, color: MMColors.cream)),
-        const SizedBox(height: 12),
-        Text(
-          'Your entrepreneur application has been\nsubmitted successfully.\n\nYou will be notified once approved\nby our team.',
-          textAlign: TextAlign.center,
-          style: serif(15, weight: FontWeight.w400, color: MMColors.cream),
-        ),
-        const SizedBox(height: 32),
-        CreamButton(label: 'View Status',
-            onTap: () => context.go('/seller/onboarding/status')),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 20),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: const BoxDecoration(
+                color: MMColors.sageLight,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.mark_email_read_rounded,
+                size: 52,
+                color: MMColors.deepOlive,
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Application Submitted! 🎉',
+            textAlign: TextAlign.center,
+            style: serif(26, weight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Your entrepreneur verification has been submitted successfully.\n\nOur team verifies accounts within 24 hours. You can track status anytime.',
+            textAlign: TextAlign.center,
+            style: sans(14, color: MMColors.textSecondary, height: 1.45),
+          ),
+          const SizedBox(height: 36),
+          PrimaryButton(
+            label: 'Check Verification Status',
+            onTap: () => context.go('/seller/onboarding/status'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -348,46 +475,64 @@ class ApplicationStatusScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final businesses = ref.watch(myBusinessesProvider);
-    return OliveScaffold(
+
+    return ModernScaffold(
+      title: 'Status Tracker',
       child: businesses.when(
-        loading: () => const Center(
-            child: CircularProgressIndicator(color: MMColors.cream)),
-        error: (e, _) => Text(apiError(e), style: serif(14, color: MMColors.cream)),
+        loading: () => const LoadingView(message: 'Checking application status…'),
+        error: (e, _) => ErrorView(message: apiError(e)),
         data: (shops) {
           final status = shops.isEmpty
               ? 'pending'
               : ((shops.first['verification'] as Map?)?['status']?.toString() ?? 'pending');
           final approved = status == 'approved';
-          return Column(children: [
-            Text('Application Status', style: serif(24, color: MMColors.cream)),
-            const SizedBox(height: 32),
-            CircleAvatar(
-              radius: 40,
-              backgroundColor: MMColors.cream,
-              child: Icon(
-                approved ? Icons.verified : Icons.hourglass_top,
-                size: 42, color: MMColors.deepOlive,
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: approved ? MMColors.sageLight : MMColors.marigoldLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    approved ? Icons.verified_rounded : Icons.hourglass_top_rounded,
+                    size: 48,
+                    color: approved ? MMColors.deepOlive : MMColors.marigold,
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              approved
-                  ? 'Congratulations!\nYour entrepreneur account\nhas been approved.'
-                  : 'Status: ${status.replaceAll('_', ' ')}\nOur team is reviewing your application.',
-              textAlign: TextAlign.center,
-              style: serif(16, weight: FontWeight.w400, color: MMColors.cream),
-            ),
-            const SizedBox(height: 32),
-            CreamButton(
-                label: 'Continue — Create credentials',
-                onTap: () => context.go('/seller/onboarding/credentials')),
-            const SizedBox(height: 10),
-            TextButton(
-              onPressed: () => ref.invalidate(myBusinessesProvider),
-              child: Text('Refresh status',
-                  style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
-            ),
-          ]);
+              const SizedBox(height: 20),
+              Text(
+                approved ? 'Congratulations! Approved 🎉' : 'Application In Review',
+                textAlign: TextAlign.center,
+                style: serif(24, weight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                approved
+                    ? 'Your shop is approved and ready. Set up your login credentials to enter the Seller Dashboard.'
+                    : 'Our verification team is reviewing your documents. Feel free to set your credentials below.',
+                textAlign: TextAlign.center,
+                style: sans(14, color: MMColors.textSecondary, height: 1.4),
+              ),
+              const SizedBox(height: 32),
+              PrimaryButton(
+                label: 'Create Seller Credentials',
+                onTap: () => context.go('/seller/onboarding/credentials'),
+              ),
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton.icon(
+                  onPressed: () => ref.invalidate(myBusinessesProvider),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Refresh Status'),
+                ),
+              ),
+            ],
+          );
         },
       ),
     );
@@ -413,9 +558,13 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
       setState(() => _error = 'Passwords do not match');
       return;
     }
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
-      await ref.read(authProvider.notifier)
+      await ref
+          .read(authProvider.notifier)
           .setCredentials(_username.text.trim(), _password.text);
       if (mounted) context.go('/seller/onboarding/security');
     } catch (e) {
@@ -428,36 +577,67 @@ class _CredentialsScreenState extends ConsumerState<CredentialsScreen> {
   @override
   Widget build(BuildContext context) {
     final ready = _username.text.trim().isNotEmpty && _password.text.length >= 6;
-    return OliveScaffold(
-      child: Column(children: [
-        Text('Became an Entrepreneur', style: serif(24, color: MMColors.cream)),
-        const SizedBox(height: 28),
-        Text('Create your credentials',
-            style: serif(18, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 16),
-        TextField(controller: _username, onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.person_outline),
-                hintText: 'UserName (Unique)')),
-        const SizedBox(height: 14),
-        TextField(controller: _password, obscureText: true,
+
+    return ModernScaffold(
+      title: 'Seller Account',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Set Your Seller Credentials', style: serif(24, weight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(
+            'Create a unique username and password for quick seller login.',
+            style: sans(14, color: MMColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          TextField(
+            controller: _username,
             onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.lock_outline), hintText: 'Password')),
-        const SizedBox(height: 14),
-        TextField(controller: _confirm, obscureText: true,
+              labelText: 'Shop Username (Unique)',
+              hintText: 'e.g. yashubakes',
+              prefixIcon: Icon(Icons.person_outline, size: 20),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _password,
+            obscureText: true,
+            onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.lock_outline), hintText: 'Confirm Password')),
-        const SizedBox(height: 6),
-        Text('Password must be at least 6 characters',
-            style: serif(12, weight: FontWeight.w400, color: MMColors.cream)),
-        if (_error != null) ...[
-          const SizedBox(height: 10),
-          Text(_error!, style: const TextStyle(color: Colors.amberAccent)),
+              labelText: 'Password (min 6 characters)',
+              prefixIcon: Icon(Icons.lock_outline, size: 20),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _confirm,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Confirm Password',
+              prefixIcon: Icon(Icons.lock_outline, size: 20),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFECEC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFF5B5B5)),
+              ),
+              child: Text(_error!, style: sans(13, color: const Color(0xFFBA1A1A))),
+            ),
+          ],
+          const SizedBox(height: 28),
+          PrimaryButton(
+            label: 'Next — Security Setup',
+            busy: _busy,
+            onTap: ready && !_busy ? _next : null,
+          ),
         ],
-        const SizedBox(height: 24),
-        CreamButton(label: _busy ? 'Saving…' : 'Next', onTap: (ready && !_busy) ? _next : null),
-      ]),
+      ),
     );
   }
 }
@@ -478,13 +658,15 @@ class _SecurityQuestionsScreenState extends ConsumerState<SecurityQuestionsScree
     'Friend Name': TextEditingController(),
     'Food Name': TextEditingController(),
   };
+
   static const _hints = {
     'School Name': 'Enter your School name',
     'Teacher Name': 'Enter your favourite teacher name',
-    'Village Name': 'Enter your village name',
+    'Village Name': 'Enter your hometown/village name',
     'Friend Name': 'Enter your best friend name',
-    'Food Name': 'Enter your favourite food name',
+    'Food Name': 'Enter your favourite dish name',
   };
+
   bool _busy = false;
 
   Future<void> _next() async {
@@ -496,8 +678,9 @@ class _SecurityQuestionsScreenState extends ConsumerState<SecurityQuestionsScree
       if (mounted) context.go('/seller');
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(apiError(e))));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(apiError(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -507,24 +690,38 @@ class _SecurityQuestionsScreenState extends ConsumerState<SecurityQuestionsScree
   @override
   Widget build(BuildContext context) {
     final ready = _controllers.values.every((c) => c.text.trim().isNotEmpty);
-    return OliveScaffold(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Center(child: Text('Security Questions', style: serif(24, color: MMColors.cream))),
-        const SizedBox(height: 20),
-        for (final entry in _controllers.entries) ...[
-          Text(entry.key,
-              style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
+
+    return ModernScaffold(
+      title: 'Account Security',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Security Questions', style: serif(24, weight: FontWeight.w700)),
           const SizedBox(height: 6),
-          TextField(
-            controller: entry.value,
-            onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(hintText: _hints[entry.key]),
+          Text(
+            'These questions help recover your seller store if you forget your password.',
+            style: sans(14, color: MMColors.textSecondary),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 20),
+          for (final entry in _controllers.entries) ...[
+            Text(entry.key,
+                style: sans(14, weight: FontWeight.w600, color: MMColors.textPrimary)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: entry.value,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(hintText: _hints[entry.key]),
+            ),
+            const SizedBox(height: 14),
+          ],
+          const SizedBox(height: 16),
+          PrimaryButton(
+            label: 'Complete & Go to Seller Dashboard',
+            busy: _busy,
+            onTap: ready && !_busy ? _next : null,
+          ),
         ],
-        const SizedBox(height: 10),
-        CreamButton(label: _busy ? 'Saving…' : 'Next', onTap: (ready && !_busy) ? _next : null),
-      ]),
+      ),
     );
   }
 }
