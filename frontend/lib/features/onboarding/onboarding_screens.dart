@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -323,11 +324,11 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
     });
 
     try {
-      final demo = await ref.read(authProvider.notifier).sendOtp(email);
+      await ref.read(authProvider.notifier).sendOtp(email);
       if (mounted) {
         context.push(
           '/onboarding/otp',
-          extra: {'email': email, 'demoOtp': demo},
+          extra: {'email': email},
         );
       }
     } catch (e) {
@@ -408,6 +409,37 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   final _otp = TextEditingController();
   bool _busy = false;
   String? _error;
+  int _cooldownSeconds = 60;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCooldownTimer();
+  }
+
+  void _startCooldownTimer() {
+    _timer?.cancel();
+    setState(() => _cooldownSeconds = 60);
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_cooldownSeconds > 0) {
+        setState(() => _cooldownSeconds--);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _otp.dispose();
+    super.dispose();
+  }
 
   Future<void> _verify() async {
     final code = _otp.text.trim();
@@ -440,6 +472,27 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     }
   }
 
+  Future<void> _resend() async {
+    if (_cooldownSeconds > 0 || _busy) return;
+    setState(() {
+      _error = null;
+      _busy = true;
+    });
+    try {
+      await ref.read(authProvider.notifier).sendOtp(widget.email);
+      _startCooldownTimer();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('A fresh 6-digit verification code has been sent')),
+        );
+      }
+    } catch (e) {
+      setState(() => _error = apiError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ModernScaffold(
@@ -461,7 +514,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 24),
           TextField(
             controller: _otp,
             keyboardType: TextInputType.number,
@@ -476,30 +529,29 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             ),
             onSubmitted: (_) => _verify(),
           ),
-          if (widget.demoOtp != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: MMColors.sageLight,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.info_outline, size: 16, color: MMColors.deepOlive),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Sandbox demo code: ${widget.demoOtp}',
-                    style: sans(12, weight: FontWeight.w600, color: MMColors.deepOlive),
-                  ),
-                ],
-              ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: MMColors.sageLight,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: MMColors.sage),
             ),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.timer_outlined, size: 16, color: MMColors.deepOlive),
+                const SizedBox(width: 8),
+                Text(
+                  'Code valid for 5 minutes · Check spam if not in inbox',
+                  style: sans(12, weight: FontWeight.w500, color: MMColors.deepOlive),
+                ),
+              ],
+            ),
+          ),
           if (_error != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
@@ -528,23 +580,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           Center(
             child: TextButton.icon(
               icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text('Resend Code'),
-              onPressed: () async {
-                try {
-                  await ref.read(authProvider.notifier).sendOtp(widget.email);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('A fresh code has been sent')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(apiError(e))),
-                    );
-                  }
-                }
-              },
+              label: Text(
+                _cooldownSeconds > 0
+                    ? 'Resend Code in ${_cooldownSeconds}s'
+                    : 'Resend Code',
+              ),
+              onPressed: (_cooldownSeconds > 0 || _busy) ? null : _resend,
             ),
           ),
         ],

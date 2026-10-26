@@ -14,3 +14,12 @@ exports.loginSchema = Joi.object({
   username: Joi.string(),
   password: Joi.string().required(),
 }).or('email', 'phone', 'username');
+
+exports.sendOtpSchema = Joi.object({
+  email: Joi.string().email().required(),
+});
+
+exports.verifyOtpSchema = Joi.object({
+  email: Joi.string().email().required(),
+  otp: Joi.string().trim().length(6).pattern(/^\d{6}$/).required(),
+});
