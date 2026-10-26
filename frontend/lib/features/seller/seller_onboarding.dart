@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart' show FormData, MultipartFile;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,7 @@ import '../../services/auth_state.dart';
 import '../../services/device_location.dart';
 import '../../services/repositories.dart';
 import '../../theme/app_theme.dart';
+import '../../shared/ui.dart';
 import '../onboarding/onboarding_screens.dart';
 
 const _categories = ['Baking', 'Handicrafts', 'Tiffin Center', 'Tailoring', 'Boutique', 'Others'];
@@ -78,6 +81,8 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         _category != null && _years != null && _address.text.trim().isNotEmpty;
     return OliveScaffold(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const StepDots(current: 1, total: 3),
+        const SizedBox(height: 16),
         Center(child: Text('Business Information', style: serif(24, color: MMColors.cream))),
         const SizedBox(height: 24),
         Text('Business Name:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
@@ -134,6 +139,26 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
 }
 
 // ---------------- Step 2: Upload Documents ----------------
+// The owner's own files (PDF / JPG / PNG / WebP, up to 5 MB) go to the server, which stores them privately.
+// Nothing here is a stock photo or a link: the server only accepts real uploads.
+class _UploadedDoc {
+  final String id;
+  final String name;
+  final String mime;
+  final int bytes;
+  const _UploadedDoc(this.id, this.name, this.mime, this.bytes);
+  factory _UploadedDoc.fromJson(Map<String, dynamic> j) => _UploadedDoc(
+        j['id'].toString(),
+        (j['name'] ?? 'document').toString(),
+        (j['mime'] ?? '').toString(),
+        ((j['bytes'] ?? 0) as num).toInt(),
+      );
+}
+
+String _prettySize(int b) => b >= 1024 * 1024
+    ? '${(b / (1024 * 1024)).toStringAsFixed(1)} MB'
+    : '${(b / 1024).ceil()} KB';
+
 class DocumentsScreen extends ConsumerStatefulWidget {
   const DocumentsScreen({super.key});
   @override
@@ -141,121 +166,286 @@ class DocumentsScreen extends ConsumerStatefulWidget {
 }
 
 class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
+  static const _maxBytes = 5 * 1024 * 1024;
   String _identityType = _identityTypes.first;
-  String? _idUrl;
-  String? _proofUrl;
-  String? _photoUrl;
+  final Map<String, _UploadedDoc> _docs = {}; // by type
+  final Set<String> _busy = {};
+  String? _error;
+  bool _loading = true;
 
-  Future<String?> _pick(String query) async {
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Consumer(builder: (ctx2, ref2, _) {
-              final photos = ref2.watch(imagesProvider(query));
-              return photos.when(
-                loading: () => const SizedBox(
-                    height: 160, child: Center(child: CircularProgressIndicator())),
-                error: (e, _) => const SizedBox(
-                    height: 100, child: Center(child: Text('Could not load images'))),
-                data: (urls) => Wrap(
-                  spacing: 8, runSpacing: 8,
-                  children: urls
-                      .map((u) => GestureDetector(
-                            onTap: () => Navigator.pop(ctx, u),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(u, width: 110, height: 110, fit: BoxFit.cover),
-                            ),
-                          ))
-                      .toList(),
-                ),
-              );
-            }),
+  String? get _businessId => ref.read(sellerOnboardingProvider)['businessId']?.toString();
+
+  @override
+  void initState() {
+    super.initState();
+    _restore();
+  }
+
+  /// If the owner comes back to this step, show what is already uploaded.
+  Future<void> _restore() async {
+    final id = _businessId;
+    if (id == null) { setState(() => _loading = false); return; }
+    try {
+      final res = await ApiClient.dio.get('/businesses/$id/documents');
+      _apply((res.data['data']['documents'] as List?) ?? const []);
+    } catch (_) {
+      // not fatal: the owner can still upload
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _apply(List list) {
+    final next = <String, _UploadedDoc>{};
+    String? idType;
+    for (final raw in list) {
+      final m = Map<String, dynamic>.from(raw as Map);
+      next[m['type'].toString()] = _UploadedDoc.fromJson(m);
+      if (m['type'] == 'id_proof' && m['identityType'] != null) idType = m['identityType'].toString();
+    }
+    if (!mounted) return;
+    setState(() {
+      _docs..clear()..addAll(next);
+      if (idType != null && _identityTypes.contains(idType)) _identityType = idType;
+    });
+  }
+
+  Future<void> _upload(String type) async {
+    final businessId = _businessId;
+    if (businessId == null) {
+      setState(() => _error = 'Please go back and save your business details first.');
+      return;
+    }
+    setState(() => _error = null);
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+        withData: true,
+      );
+    } catch (_) {
+      setState(() => _error = 'Could not open the file picker. Please try again.');
+      return;
+    }
+    if (picked == null || picked.files.isEmpty) return; // cancelled
+    final file = picked.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      setState(() => _error = 'That file could not be read. Please choose another.');
+      return;
+    }
+    if (bytes.length > _maxBytes) {
+      setState(() => _error = 'That file is ${_prettySize(bytes.length)}. Please choose one under 5 MB.');
+      return;
+    }
+    setState(() => _busy.add(type));
+    try {
+      final form = FormData.fromMap({
+        'type': type,
+        if (type == 'id_proof') 'identityType': _identityType,
+        'file': MultipartFile.fromBytes(bytes, filename: file.name),
+      });
+      final res = await ApiClient.dio.post('/businesses/$businessId/documents', data: form);
+      _apply((res.data['data'] as List?) ?? const []);
+    } catch (e) {
+      if (mounted) setState(() => _error = apiError(e));
+    } finally {
+      if (mounted) setState(() => _busy.remove(type));
+    }
+  }
+
+  Future<void> _remove(String type) async {
+    final doc = _docs[type];
+    final businessId = _businessId;
+    if (doc == null || businessId == null) return;
+    setState(() { _busy.add(type); _error = null; });
+    try {
+      final res = await ApiClient.dio.delete('/businesses/$businessId/documents/${doc.id}');
+      _apply((res.data['data'] as List?) ?? const []);
+    } catch (e) {
+      if (mounted) setState(() => _error = apiError(e));
+    } finally {
+      if (mounted) setState(() => _busy.remove(type));
+    }
+  }
+
+  /// A document stores the identity type it was uploaded under, so changing the type asks for a fresh upload.
+  Future<void> _changeIdentityType(String v) async {
+    if (v == _identityType) return;
+    final hadId = _docs.containsKey('id_proof');
+    setState(() => _identityType = v);
+    if (hadId) await _remove('id_proof');
+  }
+
+  Widget _tile({
+    required String type,
+    required String title,
+    required String hint,
+    required bool mandatory,
+    required IconData icon,
+  }) {
+    final doc = _docs[type];
+    final working = _busy.contains(type);
+    final isPdf = doc?.mime == 'application/pdf';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text(title, style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: mandatory ? MMColors.marigold : MMColors.cream.withOpacity(0.25),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(mandatory ? 'Required' : 'Optional',
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Material(
+          color: MMColors.cream,
+          borderRadius: BorderRadius.circular(14),
+          elevation: 2,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: working ? null : () => _upload(type),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: working
+                  ? const SizedBox(
+                      height: 56,
+                      child: Center(child: SizedBox(width: 26, height: 26,
+                          child: CircularProgressIndicator(strokeWidth: 3, color: MMColors.deepOlive))))
+                  : doc == null
+                      ? Column(children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: const BoxDecoration(color: MMColors.sage, shape: BoxShape.circle),
+                            child: Icon(icon, color: MMColors.deepOlive),
+                          ),
+                          const SizedBox(height: 8),
+                          Text('Tap to choose a file', style: serif(15)),
+                          const SizedBox(height: 2),
+                          Text(hint, textAlign: TextAlign.center,
+                              style: serif(12, weight: FontWeight.w400)),
+                        ])
+                      : Row(children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                                color: MMColors.sage, borderRadius: BorderRadius.circular(12)),
+                            child: Icon(isPdf ? Icons.picture_as_pdf_outlined : Icons.image_outlined,
+                                color: MMColors.deepOlive),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Row(children: [
+                                const Icon(Icons.check_circle, size: 16, color: MMColors.moss),
+                                const SizedBox(width: 4),
+                                Text('Uploaded', style: serif(13)),
+                              ]),
+                              Text(doc.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: serif(14, weight: FontWeight.w400)),
+                              Text(_prettySize(doc.bytes), style: serif(12, weight: FontWeight.w400)),
+                            ]),
+                          ),
+                          IconButton(
+                            tooltip: 'Replace',
+                            icon: const Icon(Icons.swap_horiz, color: MMColors.deepOlive),
+                            onPressed: () => _upload(type),
+                          ),
+                          IconButton(
+                            tooltip: 'Remove',
+                            icon: const Icon(Icons.delete_outline, color: MMColors.deepOlive),
+                            onPressed: () => _remove(type),
+                          ),
+                        ]),
+            ),
           ),
         ),
-      ),
+      ]),
     );
   }
 
-  Widget _uploadTile(String label, String? value, VoidCallback onTap) => Padding(
-        padding: const EdgeInsets.only(bottom: 18),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
-          const SizedBox(height: 6),
-          Material(
-            color: MMColors.cream,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: onTap,
-              child: SizedBox(
-                width: double.infinity, height: 82,
-                child: value == null
-                    ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        const Icon(Icons.upload_outlined, color: MMColors.deepOlive),
-                        Text('Upload File', style: serif(14, weight: FontWeight.w400)),
-                      ])
-                    : Row(children: [
-                        ClipRRect(
-                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
-                          child: Image.network(value, width: 82, height: 82, fit: BoxFit.cover),
-                        ),
-                        const SizedBox(width: 12),
-                        const Icon(Icons.check_circle, color: MMColors.deepOlive),
-                        const SizedBox(width: 6),
-                        Text('Uploaded', style: serif(14)),
-                      ]),
-              ),
-            ),
-          ),
-        ]),
-      );
-
   @override
   Widget build(BuildContext context) {
-    final ready = _idUrl != null && _proofUrl != null; // business photo is optional
+    final ready = _docs.containsKey('id_proof') && _docs.containsKey('business_proof');
     return OliveScaffold(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Center(child: Text('Upload Documents', style: serif(24, color: MMColors.cream))),
-        const SizedBox(height: 20),
-        Text('Identity Type:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
-          value: _identityType,
-          items: _identityTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-          onChanged: (v) => setState(() => _identityType = v ?? _identityType),
-        ),
-        const SizedBox(height: 18),
-        _uploadTile('$_identityType / ID Proof', _idUrl, () async {
-          final u = await _pick('identity card document');
-          if (u != null) setState(() => _idUrl = u);
-        }),
-        _uploadTile('Business Proof', _proofUrl, () async {
-          final u = await _pick('business certificate document');
-          if (u != null) setState(() => _proofUrl = u);
-        }),
-        _uploadTile('Business Profile Photo (optional)', _photoUrl, () async {
-          final u = await _pick('woman small business shop');
-          if (u != null) setState(() => _photoUrl = u);
-        }),
-        const SizedBox(height: 8),
-        CreamButton(
-          label: 'Next',
-          onTap: !ready ? null : () {
-            final data = Map<String, dynamic>.from(ref.read(sellerOnboardingProvider));
-            data['identityType'] = _identityType;
-            data['idUrl'] = _idUrl;
-            data['proofUrl'] = _proofUrl;
-            data['photoUrl'] = _photoUrl;
-            ref.read(sellerOnboardingProvider.notifier).state = data;
-            context.push('/seller/onboarding/review');
-          },
-        ),
-      ]),
+      child: _loading
+          ? const Padding(
+              padding: EdgeInsets.all(60),
+              child: Center(child: CircularProgressIndicator(color: MMColors.cream)))
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const StepDots(current: 2, total: 3),
+              const SizedBox(height: 16),
+              Center(child: Text('Upload Documents', style: serif(24, color: MMColors.cream))),
+              const SizedBox(height: 8),
+              Center(
+                child: Text('PDF, JPG, PNG or WebP · up to 5 MB each',
+                    style: serif(13, weight: FontWeight.w400, color: MMColors.cream)),
+              ),
+              const SizedBox(height: 20),
+              Text('Identity Type:', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                value: _identityType,
+                items: _identityTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                onChanged: (v) { if (v != null) _changeIdentityType(v); },
+              ),
+              const SizedBox(height: 18),
+              _tile(
+                type: 'id_proof',
+                title: '$_identityType / ID Proof',
+                hint: 'A clear photo or scan of your $_identityType',
+                mandatory: true,
+                icon: Icons.badge_outlined,
+              ),
+              _tile(
+                type: 'business_proof',
+                title: 'Business Proof',
+                hint: 'Shop licence, FSSAI, GST certificate or any proof you run this business',
+                mandatory: true,
+                icon: Icons.description_outlined,
+              ),
+              _tile(
+                type: 'address_proof',
+                title: 'Address Proof',
+                hint: 'Electricity bill, rent agreement… (helps us verify faster)',
+                mandatory: false,
+                icon: Icons.home_work_outlined,
+              ),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Icon(Icons.lock_outline, size: 16, color: MMColors.cream),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Your documents are stored privately and are only seen by our verification team. They are never shown to customers.',
+                    style: serif(12, weight: FontWeight.w400, color: MMColors.cream),
+                  ),
+                ),
+              ]),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(_error!, style: const TextStyle(color: Colors.amberAccent)),
+              ],
+              const SizedBox(height: 20),
+              CreamButton(
+                label: 'Next',
+                onTap: (!ready || _busy.isNotEmpty) ? null : () {
+                  final data = Map<String, dynamic>.from(ref.read(sellerOnboardingProvider));
+                  data['identityType'] = _identityType;
+                  data['idName'] = _docs['id_proof']?.name;
+                  data['proofName'] = _docs['business_proof']?.name;
+                  data['addressName'] = _docs['address_proof']?.name;
+                  ref.read(sellerOnboardingProvider.notifier).state = data;
+                  context.push('/seller/onboarding/review');
+                },
+              ),
+            ]),
     );
   }
 }
@@ -275,16 +465,8 @@ class _ReviewDetailsScreenState extends ConsumerState<ReviewDetailsScreen> {
     final data = ref.read(sellerOnboardingProvider);
     setState(() => _busy = true);
     try {
-      await ApiClient.dio.post(
-        '/businesses/${data['businessId']}/verification-documents',
-        data: {
-          'documents': [
-            {'type': 'id_proof', 'url': data['idUrl'], 'identityType': data['identityType']},
-            {'type': 'business_proof', 'url': data['proofUrl']},
-            if (data['photoUrl'] != null) {'type': 'profile_photo', 'url': data['photoUrl']},
-          ],
-        },
-      );
+      // The files were uploaded in the previous step; this only submits the application for review.
+      await ApiClient.dio.post('/businesses/${data['businessId']}/verification-documents', data: {});
       if (mounted) context.go('/seller/onboarding/submitted');
     } catch (e) {
       if (mounted) {
@@ -310,6 +492,8 @@ class _ReviewDetailsScreenState extends ConsumerState<ReviewDetailsScreen> {
     final data = ref.watch(sellerOnboardingProvider);
     return OliveScaffold(
       child: Column(children: [
+        const StepDots(current: 3, total: 3),
+        const SizedBox(height: 16),
         Text('Review Your Details', style: serif(24, color: MMColors.cream)),
         const SizedBox(height: 20),
         Container(
@@ -326,6 +510,9 @@ class _ReviewDetailsScreenState extends ConsumerState<ReviewDetailsScreen> {
             _row('Experience', data['years']?.toString()),
             _row('Address', data['address']?.toString()),
             _row('Identity', data['identityType']?.toString()),
+            _row('ID proof', data['idName']?.toString()),
+            _row('Business proof', data['proofName']?.toString()),
+            if (data['addressName'] != null) _row('Address proof', data['addressName']?.toString()),
           ]),
         ),
         const SizedBox(height: 16),

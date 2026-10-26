@@ -942,7 +942,7 @@
         "tags": [
           "Businesses"
         ],
-        "summary": "Submit verification documents (status → in_review)",
+        "summary": "Submit the application for review (status → in_review)",
         "security": [
           {
             "bearerAuth": []
@@ -958,9 +958,16 @@
             }
           }
         ],
+        "description": "No body. Requires an ID proof and a business proof to have been uploaded through `POST /businesses/{id}/documents`. Any URLs sent in the body are ignored.",
         "responses": {
           "200": {
-            "description": "Business"
+            "description": "{ id, status }"
+          },
+          "422": {
+            "description": "Required documents missing (DOCUMENTS_MISSING) or already submitted"
+          },
+          "404": {
+            "description": "Not your business"
           }
         }
       }
@@ -2140,6 +2147,201 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/businesses/{id}/documents": {
+      "get": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "List my verification documents (metadata only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ status, documents[] } — no storage ids"
+          },
+          "404": {
+            "description": "Not your business"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Upload a verification document (entrepreneur, private)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "multipart/form-data: `file` plus `type` (id_proof | business_proof | address_proof | other) and, for id_proof, `identityType` (Aadhaar | Voter ID | Driving License | Passport). PDF, JPEG, PNG or WebP decided by file content, ≤ 5 MB, 40 uploads/hour. Stored as a private (authenticated) asset, never as a public URL. One document per type: re-uploading replaces it. Only while the application is pending or rejected.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "type"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "id_proof",
+                      "business_proof",
+                      "address_proof",
+                      "other"
+                    ]
+                  },
+                  "identityType": {
+                    "type": "string",
+                    "enum": [
+                      "Aadhaar",
+                      "Voter ID",
+                      "Driving License",
+                      "Passport"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated document list (metadata)"
+          },
+          "413": {
+            "description": "Larger than 5 MB"
+          },
+          "415": {
+            "description": "Not PDF/JPEG/PNG/WebP"
+          },
+          "422": {
+            "description": "Missing/invalid fields, or application is locked"
+          },
+          "503": {
+            "description": "Storage not configured (UPLOAD_NOT_CONFIGURED)"
+          },
+          "502": {
+            "description": "Upload failed"
+          }
+        }
+      }
+    },
+    "/businesses/{id}/documents/{docId}": {
+      "delete": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Remove one of my verification documents",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "docId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Remaining documents"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "422": {
+            "description": "Locked while under review"
+          }
+        }
+      }
+    },
+    "/admin/verifications/{businessId}/documents/{docId}/link": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Short-lived (5 min) signed link to one verification document",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "businessId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "docId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ url, expiresInSeconds, mime, type } — Cache-Control: no-store"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "403": {
+            "description": "Admins only"
           }
         }
       }

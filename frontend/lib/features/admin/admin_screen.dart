@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
@@ -47,6 +48,56 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiError(e))));
       }
     }
+  }
+
+  static const _docLabels = {
+    'id_proof': 'ID proof',
+    'business_proof': 'Business proof',
+    'address_proof': 'Address proof',
+    'other': 'Other document',
+  };
+
+  /// Documents are private: each open asks the server for a link that expires in a few minutes.
+  Future<void> _openDoc(String businessId, String docId) async {
+    try {
+      final res = await ApiClient.dio.get('/admin/verifications/$businessId/documents/$docId/link');
+      final url = res.data['data']['url']?.toString();
+      if (url == null || url.isEmpty) throw Exception('no link');
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiError(e))));
+      }
+    }
+  }
+
+  Future<void> _viewDocs(Map<String, dynamic> b) async {
+    final docs = (((b['verification'] as Map?)?['documents']) as List?) ?? const [];
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('${b['name'] ?? 'Shop'} · documents'),
+        content: SizedBox(
+          width: 420,
+          child: docs.isEmpty
+              ? const Text('No documents uploaded.')
+              : Column(mainAxisSize: MainAxisSize.min, children: docs.map((raw) {
+                  final d = Map<String, dynamic>.from(raw as Map);
+                  final label = _docLabels[d['type']] ?? d['type'].toString();
+                  final idType = d['identityType'] != null ? ' (${d['identityType']})' : '';
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(d['mime'] == 'application/pdf' ? Icons.picture_as_pdf_outlined : Icons.image_outlined),
+                    title: Text('$label$idType'),
+                    subtitle: Text(d['originalName']?.toString() ?? ''),
+                    trailing: const Icon(Icons.open_in_new, size: 18),
+                    onTap: d['_id'] == null ? null : () => _openDoc(b['_id'].toString(), d['_id'].toString()),
+                  );
+                }).toList()),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))],
+      ),
+    );
   }
 
   @override
@@ -135,6 +186,12 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                                   '${(rating['count'] ?? 0) == 0 ? 'No ratings yet' : '★ ${rating['avg']} (${rating['count']} reviews)'}'),
                               trailing: needsAction
                                   ? Row(mainAxisSize: MainAxisSize.min, children: [
+                                      TextButton.icon(
+                                        onPressed: () => _viewDocs(Map<String, dynamic>.from(b)),
+                                        icon: const Icon(Icons.folder_open, size: 18),
+                                        label: const Text('Documents'),
+                                      ),
+                                      const SizedBox(width: 8),
                                       FilledButton(
                                         onPressed: () =>
                                             _review(b['_id'].toString(), 'approve'),

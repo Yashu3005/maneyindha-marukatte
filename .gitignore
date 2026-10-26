@@ -24,3 +24,7 @@ frontend/android/.gradle/
 
 # Docker
 *.local.yml
+
+# Vercel CLI link files (never commit)
+.vercel/
+backend/.vercel/

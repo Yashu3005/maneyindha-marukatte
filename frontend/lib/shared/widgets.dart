@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../theme/app_theme.dart';
+import 'ui.dart';
 
 String rupees(dynamic amount) => '₹${(amount ?? 0).toString()}';
 
@@ -57,8 +59,11 @@ class NetImage extends StatelessWidget {
     if (url == null || url!.isEmpty) {
       return Container(
         height: height, width: width,
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        child: const Icon(Icons.storefront),
+        decoration: const BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+          colors: [MMColors.sage, MMColors.blush],
+        )),
+        child: const Icon(Icons.storefront, color: MMColors.olive),
       );
     }
     return Image.network(url!, height: height, width: width, fit: BoxFit.cover,
@@ -76,7 +81,12 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final images = (product['images'] as List?) ?? [];
-    return Card(
+    return Container(
+      decoration: BoxDecoration(
+        color: MMColors.card,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: softShadow(0.09),
+      ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => context.push('/product/${product['_id']}'),

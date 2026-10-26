@@ -33,16 +33,29 @@ router.post('/', requireAuth, requireRole('entrepreneur'),
   })),
   businessController.create);
 
-// Verification documents (entrepreneur submits → status: in_review)
-router.post('/:id/verification-documents',
-  requireAuth, requireRole('entrepreneur'),
+// Verification documents: private uploads, then an explicit submit.
+const multer = require('multer');
+const rateLimit = require('express-rate-limit');
+const AppError = require('../utils/AppError');
+const docs = require('../services/verificationDoc.service');
+const docUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: docs.MAX_BYTES, files: 1, fields: 4 } });
+const docLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 40, standardHeaders: true });
+const receiveDoc = (req, res, next) => docUpload.single('file')(req, res, (err) => {
+  if (!err) return next();
+  if (err.code === 'LIMIT_FILE_SIZE') return next(new AppError('File must be 5 MB or smaller', 413));
+  return next(new AppError('Invalid upload', 400));
+});
+const ownerOnly = [requireAuth, requireRole('entrepreneur')];
+
+router.get('/:id/documents', ...ownerOnly, businessController.listDocuments);
+router.post('/:id/documents', ...ownerOnly, docLimiter, receiveDoc,
   validate(Joi.object({
-    documents: Joi.array().items(Joi.object({
-      type: Joi.string().valid('id_proof', 'address_proof', 'business_proof', 'profile_photo', 'gst', 'fssai', 'other').required(),
-      identityType: Joi.string().valid('Aadhaar', 'Voter ID', 'Driving License', 'Passport'),
-      url: Joi.string().uri().required(),
-    })).min(1).required(),
+    type: Joi.string().valid(...docs.DOC_TYPES).required(),
+    identityType: Joi.string().valid(...docs.IDENTITY_TYPES),
   })),
-  businessController.uploadDocs);
+  businessController.addDocument);
+router.delete('/:id/documents/:docId', ...ownerOnly, businessController.removeDocument);
+// Entrepreneur submits → status: in_review (needs ID proof + business proof uploaded)
+router.post('/:id/verification-documents', ...ownerOnly, validate(Joi.object({})), businessController.uploadDocs);
 
 module.exports = router;

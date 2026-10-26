@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
+import '../../shared/ui.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
 import '../cart/cart_screen.dart';
@@ -22,6 +23,12 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Number of items in the cart, only asked for when signed in.
+    final loggedIn = ref.watch(authProvider).isLoggedIn;
+    final cartCount = !loggedIn
+        ? 0
+        : (ref.watch(cartProvider).valueOrNull?['items'] as List? ?? const [])
+            .fold<int>(0, (n, raw) => n + (((raw as Map)['quantity'] ?? 0) as num).toInt());
     return Scaffold(
       body: IndexedStack(index: _index, children: const [
         _CustomerHome(),
@@ -32,11 +39,25 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
-          NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), selectedIcon: Icon(Icons.shopping_bag), label: 'Cart'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
+        destinations: [
+          const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+          const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: cartCount > 0,
+              label: Text('$cartCount'),
+              backgroundColor: MMColors.clay,
+              child: const Icon(Icons.shopping_bag_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: cartCount > 0,
+              label: Text('$cartCount'),
+              backgroundColor: MMColors.clay,
+              child: const Icon(Icons.shopping_bag),
+            ),
+            label: 'Cart',
+          ),
+          const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );
@@ -100,18 +121,34 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Row(children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Namaste, ${auth.name.split(' ').first} 🌸', style: serif(24)),
-                  const Text('Discover home-made treasures near you'),
-                ]),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: MMColors.heroGradient,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: softShadow(0.22),
               ),
-              UserAvatar(
-                url: auth.user?['avatarUrl']?.toString(),
-                backgroundColor: MMColors.sage,
-              ),
-            ]),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Namaste, ${auth.name.split(' ').first} 🌸',
+                        style: serif(24, color: MMColors.cream)),
+                    const SizedBox(height: 4),
+                    Text('Discover home-made treasures near you',
+                        style: TextStyle(color: MMColors.cream.withOpacity(0.85))),
+                  ]),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(color: MMColors.cream, shape: BoxShape.circle),
+                  child: UserAvatar(
+                    url: auth.user?['avatarUrl']?.toString(),
+                    backgroundColor: MMColors.sage,
+                  ),
+                ),
+              ]),
+            ),
             const SizedBox(height: 16),
             TextField(
               onChanged: (v) => setState(() => _query = v.toLowerCase()),
@@ -277,7 +314,13 @@ class _ShopCard extends StatelessWidget {
     final rating = (business['rating'] as Map?) ?? {};
     return SizedBox(
       width: 220,
-      child: Card(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: MMColors.card,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: softShadow(0.10),
+        ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: () => context.push('/business/${business['_id']}'),
@@ -374,14 +417,28 @@ class _CustomerProfile extends ConsumerWidget {
     final auth = ref.watch(authProvider);
     return SafeArea(
       child: ListView(padding: const EdgeInsets.all(16), children: [
-        Center(child: UserAvatar(
-          url: auth.user?['avatarUrl']?.toString(),
-          radius: 44,
-          backgroundColor: MMColors.sage,
-        )),
-        const SizedBox(height: 12),
-        Center(child: Text(auth.name, style: serif(22))),
-        Center(child: Text(auth.email)),
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          decoration: BoxDecoration(
+            gradient: MMColors.heroGradient,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: softShadow(0.22),
+          ),
+          child: Column(children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(color: MMColors.cream, shape: BoxShape.circle),
+              child: UserAvatar(
+                url: auth.user?['avatarUrl']?.toString(),
+                radius: 44,
+                backgroundColor: MMColors.sage,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(auth.name, style: serif(22, color: MMColors.cream)),
+            Text(auth.email, style: TextStyle(color: MMColors.cream.withOpacity(0.85))),
+          ]),
+        ),
         const SizedBox(height: 20),
         Card(child: Column(children: [
           ListTile(

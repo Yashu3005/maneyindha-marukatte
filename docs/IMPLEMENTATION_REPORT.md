@@ -66,3 +66,34 @@ See §10 and `docs/security.md`. Still open: access tokens stay valid ≤15 min 
 
 ## 15. Actions needing your explicit approval
 Rotating/revoking the exposed key; adding a sending domain to Resend; running the backfill with `--apply`; creating the unique `users.email` index; dropping the old `businesses.location` 2dsphere index; upgrading `firebase-admin` (breaking); switching Razorpay to Live; deploying anything; deciding on delivery-partner tracking; pushing this to Git.
+
+
+---
+
+# Addendum: UI refresh, cart/checkout pop-ups, real document upload
+
+## What was wrong
+The "Upload Documents" step of entrepreneur onboarding never uploaded the owner's files. It opened a picker of **stock photos** (Pexels searches such as "identity card document") and sent those photo URLs to `POST /businesses/:id/verification-documents`, which accepted **any URL**. An application could be "verified" with a stock photo or a link the applicant did not own, and an admin had no way to open a document at all.
+
+## What changed
+
+| Area | Change | Status |
+|---|---|---|
+| Document upload (backend) | `POST /businesses/:id/documents` (multipart `file`, `type`, `identityType` for ID proofs). PDF/JPEG/PNG/WebP decided from file bytes, ≤ 5 MB, 40/hour. Stored as **private (`authenticated`) Cloudinary assets**, never a public URL. One document per type (re-upload replaces and removes the old file). Locked while in review/approved. `GET`/`DELETE` for the owner (metadata only, no storage ids). | **PASS** (18 tests incl. mutation checks) · real Cloudinary NOT TESTED |
+| Submit | `POST /businesses/:id/verification-documents` now takes no body, ignores any URLs, and refuses (422 `DOCUMENTS_MISSING`) unless an ID proof and a business proof were really uploaded. | **PASS** (tests) |
+| Admin access | `GET /admin/verifications/:businessId/documents/:docId/link` returns a 5-minute signed link (`Cache-Control: no-store`), admin/super_admin only. Admin screen has a **Documents** button. | **PASS** (tests) · real signed link NOT TESTED |
+| OpenAPI / docs | All new routes documented; route-drift test still passes. | **PASS** |
+| Flutter: theme | Gradient hero/olive canvases with soft shapes, soft shadows, floating snackbars, rounded sheets/dialogs, page transitions. | NOT TESTED (not compiled) |
+| Flutter: cart | Swipe to remove (with Undo), quantity steppers, "Empty cart" confirm, coupon card, sticky total + Checkout bar, friendly empty/signed-out states, cart-count badge on the nav bar. | NOT TESTED (not compiled) |
+| Flutter: add-to-cart pop-up | Quantity picker on the product page; after adding, a bottom sheet shows what was added, the cart count/total, and Keep shopping / View cart. | NOT TESTED (not compiled) |
+| Flutter: order pop-up | "Confirm your order" sheet (items, delivery or pickup, payment method, exact amount) before anything is placed; "Order placed" success dialog afterwards. A payment that is not confirmed is **not** shown as success. | NOT TESTED (not compiled) |
+| Flutter: orders / shop / home / profile | Status pills, 5-step order tracker, shop banner, hero header, profile header. | NOT TESTED (not compiled) |
+| Flutter: documents screen | Real file picker (`file_picker`), per-document status, replace/remove, size check, privacy note, step dots (1-2-3). | NOT TESTED (not compiled) |
+
+## Not done / limits
+- No Dart/Flutter SDK was reachable in the build environment, so **none of the Flutter changes were compiled or run**. They passed only a structural (bracket/string) check and manual review. Run `flutter pub get && flutter analyze` first.
+- New packages: `file_picker ^8.1.2`, `url_launcher ^6.3.0` (versions not resolved here).
+- Cloudinary: PDF delivery can be restricted on new accounts (Settings → Security → "PDF and ZIP files delivery"). PDFs are uploaded as `raw` private assets and fetched through a signed download link; this has **not** been exercised against the real service.
+- The optional "business profile photo" step was removed from document upload (it was a stock photo). A real shop photo/logo upload is a separate feature.
+- Login, register and seller dashboard screens still use the base theme only.
+- Applications already submitted with the old stock-photo "documents" keep those legacy entries (they have a `url`, no `publicId`); admins cannot open them. Ask those applicants to re-upload (reject with a reason, then they can upload again).

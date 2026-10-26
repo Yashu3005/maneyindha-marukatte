@@ -20,4 +20,7 @@ router.post('/verifications/:businessId',
   })),
   adminController.reviewBusiness);
 
+// Short-lived link to one verification document (admins only; documents are never public).
+router.get('/verifications/:businessId/documents/:docId/link', adminController.documentLink);
+
 module.exports = router;

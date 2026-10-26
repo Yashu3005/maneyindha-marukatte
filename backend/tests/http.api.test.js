@@ -184,12 +184,12 @@ describe('input validation (422) happens before any DB access', () => {
     expect((await request(app).post(`${api}/businesses`).set(h).send({})).status).toBe(422);
     expect((await request(app).post(`${api}/businesses`).set(h).send({ name: 'ok shop', location: { coordinates: [999, 999] } })).status).toBe(422);
   });
-  test('verification-documents validation', async () => {
+  test('verification-documents (submit) takes no body and never trusts URLs', async () => {
     const h = bearer('entrepreneur');
     const url = `${api}/businesses/${oid()}/verification-documents`;
-    expect((await request(app).post(url).set(h).send({ documents: [] })).status).toBe(422);
-    expect((await request(app).post(url).set(h).send({ documents: [{ type: 'id_proof', url: 'not a url' }] })).status).toBe(422);
-    expect((await request(app).post(url).set(h).send({ documents: [{ type: 'id_proof', url: null }] })).status).toBe(422);
+    // unknown business -> 404 (the body is not what is checked any more)
+    jest.spyOn(require('../src/models/Business'), 'findOne').mockResolvedValue(null);
+    expect((await request(app).post(url).set(h).send({ documents: [{ type: 'id_proof', url: 'https://x.example/a.png' }] })).status).toBe(404);
   });
   test('product create validation', async () => {
     const h = bearer('entrepreneur');

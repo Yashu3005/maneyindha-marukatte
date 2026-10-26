@@ -15,37 +15,51 @@ class OliveScaffold extends StatelessWidget {
   final bool showBack;
   const OliveScaffold({super.key, required this.child, this.showBack = true});
 
+  Widget _blob(double size, Color color) => Container(
+        width: size, height: size,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: MMColors.olive,
-      body: SafeArea(
-        child: Stack(children: [
-          if (showBack && context.canPop())
-            Positioned(
-              top: 8, left: 8,
-              child: Material(
-                color: MMColors.sage,
-                borderRadius: BorderRadius.circular(8),
-                child: InkWell(
-                  onTap: () => context.pop(),
-                  child: const Padding(
-                    padding: EdgeInsets.all(8),
-                    child: Icon(Icons.chevron_left, color: MMColors.deepOlive),
+      body: Container(
+        decoration: const BoxDecoration(gradient: MMColors.oliveGradient),
+        child: SafeArea(
+          child: Stack(children: [
+            // soft decorative shapes so the canvas is not a flat colour
+            Positioned(top: -70, right: -50, child: _blob(220, MMColors.cream.withOpacity(0.08))),
+            Positioned(bottom: -90, left: -60, child: _blob(260, MMColors.deepOlive.withOpacity(0.10))),
+            Positioned(bottom: 120, right: -30, child: _blob(90, MMColors.marigold.withOpacity(0.12))),
+            if (showBack && context.canPop())
+              Positioned(
+                top: 8, left: 8,
+                child: Material(
+                  color: MMColors.sage,
+                  borderRadius: BorderRadius.circular(10),
+                  elevation: 2,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => context.pop(),
+                    child: const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: Icon(Icons.chevron_left, color: MMColors.deepOlive),
+                    ),
                   ),
                 ),
               ),
-            ),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(28),
-                child: child,
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(28),
+                  child: child,
+                ),
               ),
             ),
-          ),
-        ]),
+          ]),
+        ),
       ),
     );
   }
@@ -54,21 +68,34 @@ class OliveScaffold extends StatelessWidget {
 class CreamButton extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
-  const CreamButton({super.key, required this.label, this.onTap});
+  final IconData? icon;
+  const CreamButton({super.key, required this.label, this.onTap, this.icon});
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return SizedBox(
       width: double.infinity,
-      child: Material(
-        color: onTap == null ? MMColors.cream.withOpacity(0.5) : MMColors.cream,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: Text(label, style: serif(20))),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: enabled
+              ? [BoxShadow(color: Colors.black.withOpacity(0.18), blurRadius: 14, offset: const Offset(0, 6))]
+              : null,
+        ),
+        child: Material(
+          color: enabled ? MMColors.cream : MMColors.cream.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                if (icon != null) ...[Icon(icon, color: MMColors.deepOlive), const SizedBox(width: 8)],
+                Text(label, style: serif(20)),
+              ]),
+            ),
           ),
         ),
       ),

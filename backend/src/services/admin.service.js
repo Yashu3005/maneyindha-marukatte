@@ -51,15 +51,3 @@ exports.reviewBusiness = async (adminId, businessId, { action, reason }) => {
 
   return business;
 };
-
-exports.uploadVerificationDocs = async (ownerId, businessId, documents) => {
-  const business = await Business.findOne({ _id: businessId, owner: ownerId });
-  if (!business) throw new AppError('Business not found', 404);
-
-  business.verification.documents.push(
-    ...documents.map((d) => ({ ...d, uploadedAt: new Date() }))
-  );
-  business.verification.status = 'in_review';
-  await business.save();
-  return business;
-};

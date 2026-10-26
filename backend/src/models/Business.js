@@ -34,7 +34,11 @@ const businessSchema = new mongoose.Schema(
     yearsOfExperience: String,
     verification: {
       status: { type: String, enum: ['pending', 'in_review', 'approved', 'rejected'], default: 'pending', index: true },
-      documents: [{ type: { type: String }, url: String, identityType: String, uploadedAt: Date }],
+      documents: [{
+        type: { type: String }, url: String, identityType: String, uploadedAt: Date,
+        // Private uploads: stored as authenticated assets, never as a public URL. Admins get a short-lived link.
+        publicId: String, resourceType: String, format: String, mime: String, bytes: Number, originalName: String,
+      }],
       reviewedBy: { type: mongoose.Types.ObjectId, ref: 'User' },
       reviewedAt: Date,
       rejectionReason: String,

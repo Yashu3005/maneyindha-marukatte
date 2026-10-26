@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/repositories.dart';
+import '../../shared/ui.dart';
 import '../../shared/widgets.dart';
+import '../../theme/app_theme.dart';
 
 class BusinessScreen extends ConsumerWidget {
   final String id;
@@ -20,31 +22,67 @@ class BusinessScreen extends ConsumerWidget {
         data: (b) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: SizedBox(height: 160, width: double.infinity,
-                  child: NetImage(b['bannerUrl']?.toString())),
-            ),
-            const SizedBox(height: 16),
-            Row(children: [
-              Expanded(
-                child: Text(b['name']?.toString() ?? '',
-                    style: Theme.of(context).textTheme.headlineSmall),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: softShadow(0.16),
               ),
-              const Icon(Icons.verified, color: Colors.teal),
-            ]),
-            const SizedBox(height: 8),
-            Text(b['description']?.toString() ?? ''),
-            const SizedBox(height: 8),
-            Text(
-              [
-                (b['address'] as Map?)?['line1'],
-                (b['address'] as Map?)?['city'],
-              ].where((x) => x != null).join(', '),
-              style: Theme.of(context).textTheme.bodySmall,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: SizedBox(
+                  height: 190, width: double.infinity,
+                  child: Stack(fit: StackFit.expand, children: [
+                    NetImage(b['bannerUrl']?.toString()),
+                    // darkens the bottom so the shop name stays readable on any photo
+                    const DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, Color(0xCC1F2812)],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 16, right: 16, bottom: 14,
+                      child: Row(children: [
+                        Expanded(
+                          child: Text(b['name']?.toString() ?? '',
+                              style: serif(24, color: Colors.white)),
+                        ),
+                        const Icon(Icons.verified, color: Colors.white),
+                      ]),
+                    ),
+                  ]),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            SoftCard(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                if ((b['description']?.toString() ?? '').isNotEmpty) Text(b['description'].toString()),
+                if ([
+                  (b['address'] as Map?)?['line1'],
+                  (b['address'] as Map?)?['city'],
+                ].any((x) => x != null)) ...[
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    const Icon(Icons.location_on_outlined, size: 16, color: MMColors.moss),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        [
+                          (b['address'] as Map?)?['line1'],
+                          (b['address'] as Map?)?['city'],
+                        ].where((x) => x != null).join(', '),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ]),
+                ],
+              ]),
             ),
             const SizedBox(height: 24),
-            Text('Products', style: Theme.of(context).textTheme.titleLarge),
+            Text('Products', style: serif(20)),
             const SizedBox(height: 12),
             products.when(
               loading: () => const LoadingView(),

@@ -111,10 +111,34 @@ exports.setLocation = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
+// Submit the application for review. The documents themselves arrive through the upload endpoint;
+// URLs in the body are ignored, so a client can never "attach" a link it does not own.
 exports.uploadDocs = async (req, res, next) => {
   try {
-    const adminService = require('../services/admin.service');
-    ok(res, await adminService.uploadVerificationDocs(req.user.id, req.params.id, req.body.documents));
+    const docs = require('../services/verificationDoc.service');
+    const business = await docs.submitForReview(req.user.id, req.params.id);
+    ok(res, { id: business._id, status: business.verification.status });
+  } catch (e) { next(e); }
+};
+
+exports.addDocument = async (req, res, next) => {
+  try {
+    const docs = require('../services/verificationDoc.service');
+    ok(res, await docs.addDocument(req.user.id, req.params.id, req.file, req.body));
+  } catch (e) { next(e); }
+};
+
+exports.listDocuments = async (req, res, next) => {
+  try {
+    const docs = require('../services/verificationDoc.service');
+    ok(res, await docs.listDocuments(req.user.id, req.params.id));
+  } catch (e) { next(e); }
+};
+
+exports.removeDocument = async (req, res, next) => {
+  try {
+    const docs = require('../services/verificationDoc.service');
+    ok(res, await docs.removeDocument(req.user.id, req.params.id, req.params.docId));
   } catch (e) { next(e); }
 };
 
