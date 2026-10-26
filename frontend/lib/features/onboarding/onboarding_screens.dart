@@ -398,8 +398,7 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
 // ---------------- 3. OTP Screen ----------------
 class OtpScreen extends ConsumerStatefulWidget {
   final String email;
-  final String? demoOtp;
-  const OtpScreen({super.key, required this.email, this.demoOtp});
+  const OtpScreen({super.key, required this.email});
 
   @override
   ConsumerState<OtpScreen> createState() => _OtpScreenState();
