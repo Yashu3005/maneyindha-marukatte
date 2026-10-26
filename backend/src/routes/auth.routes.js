@@ -16,13 +16,13 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Stricter rate limiter on OTP requests to guard against abuse and spam
+// Stricter rate limiter on OTP requests to guard against email abuse and spam
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 15,
   message: {
     success: false,
-    message: 'Too many verification code requests from this IP. Please wait 15 minutes.',
+    message: 'Too many verification code requests from this IP. Please wait 15 minutes before requesting again.',
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -32,7 +32,11 @@ router.post('/register', authLimiter, validate(registerSchema), authController.r
 router.post('/login', authLimiter, validate(loginSchema), authController.login);
 router.post('/refresh', authLimiter, authController.refresh);
 router.post('/firebase-exchange', authLimiter, authController.firebaseExchange);
+
+// Email OTP Endpoints (both /otp/send and /send-otp aliases supported)
 router.post('/otp/send', otpLimiter, validate(sendOtpSchema), authController.sendOtp);
 router.post('/otp/verify', otpLimiter, validate(verifyOtpSchema), authController.verifyOtp);
+router.post('/send-otp', otpLimiter, validate(sendOtpSchema), authController.sendOtp);
+router.post('/verify-otp', otpLimiter, validate(verifyOtpSchema), authController.verifyOtp);
 
 module.exports = router;

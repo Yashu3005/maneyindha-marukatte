@@ -77,7 +77,16 @@ describe('Email OTP Authentication Service', () => {
       jest.spyOn(emailService, 'sendOtpEmail').mockResolvedValue({ delivered: true });
 
       await authService.sendOtp('test@example.com');
-      expect(deleteManySpy).toHaveBeenCalledWith({ email: 'test@example.com' });
+      expect(deleteManySpy).toHaveBeenCalledWith({ email: 'test@example.com', purpose: 'verification' });
+    });
+
+    test('never saves OTP or pretends success if email provider fails to send', async () => {
+      jest.spyOn(Otp, 'findOne').mockResolvedValue(null);
+      const createSpy = jest.spyOn(Otp, 'create').mockResolvedValue({});
+      jest.spyOn(emailService, 'sendOtpEmail').mockRejectedValue(new Error('Resend rate limit exceeded'));
+
+      await expect(authService.sendOtp('user@example.com')).rejects.toThrow('Resend rate limit exceeded');
+      expect(createSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -211,13 +220,47 @@ describe('Email OTP Authentication Service', () => {
     });
   });
 
-  describe('Email Template Generation', () => {
+  describe('Email Template Generation & Real Dispatch Verification', () => {
     test('renders branded HTML with correct OTP and security warnings', () => {
       const html = emailService.buildOtpEmailHtml('749201');
       expect(html).toContain('749201');
-      expect(html).toContain('Valid for 5 minutes only');
+      expect(html).toContain('This code is valid for 5 minutes only');
       expect(html).toContain('MANEYINDHA MARUKATTE');
-      expect(html).toContain('Never share this code with anyone');
+      expect(html).toContain('Do not share this OTP with anyone');
+    });
+
+    test('sendOtpEmail throws explicit 503 error when RESEND_API_KEY is not configured (never simulates delivery)', async () => {
+      const prevKey = process.env.RESEND_API_KEY;
+      delete process.env.RESEND_API_KEY;
+
+      await expect(
+        emailService.sendOtpEmail({ to: 'realuser@gmail.com', otp: '123456' })
+      ).rejects.toThrow('Email delivery service is not configured');
+
+      process.env.RESEND_API_KEY = prevKey;
+    });
+
+    test('sendOtpEmail dispatches real HTTP POST to Resend API endpoint with exact recipient', async () => {
+      process.env.RESEND_API_KEY = 're_test_real_key_123456';
+      const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ id: 'email_msg_123' }),
+      });
+
+      const res = await emailService.sendOtpEmail({ to: 'specific.recipient@domain.com', otp: '852963' });
+
+      expect(res.delivered).toBe(true);
+      expect(res.id).toBe('email_msg_123');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      const [url, options] = fetchSpy.mock.calls[0];
+      expect(url).toBe('https://api.resend.com/emails');
+      expect(options.headers['Authorization']).toBe('Bearer re_test_real_key_123456');
+
+      const sentBody = JSON.parse(options.body);
+      expect(sentBody.to).toEqual(['specific.recipient@domain.com']);
+      expect(sentBody.subject).toBe('Verify Your Email – Maneyindha Marukatte');
+      expect(sentBody.text).toContain('852963');
     });
   });
 });

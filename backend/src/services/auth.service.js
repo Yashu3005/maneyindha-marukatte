@@ -122,14 +122,16 @@ exports.refresh = async (refreshToken) => {
  * Generates and delivers a cryptographically secure 6-digit OTP via Resend.
  * Enforces a 60-second cooldown between requests and sets a 5-minute expiry.
  */
-exports.sendOtp = async (rawEmail) => {
+exports.sendOtp = async (rawEmail, purpose = 'verification') => {
   if (!rawEmail || !isValidEmail(rawEmail)) {
     throw new AppError('A valid email address is required', 422);
   }
   const email = rawEmail.toLowerCase().trim();
+  const validPurposes = ['registration', 'login', 'verification'];
+  const safePurpose = validPurposes.includes(purpose) ? purpose : 'verification';
 
   // Rate-limiting / resend cooldown protection
-  const existing = await Otp.findOne({ email });
+  const existing = await Otp.findOne({ email, purpose: safePurpose });
   if (existing && existing.lastResendAt) {
     const elapsed = Date.now() - new Date(existing.lastResendAt).getTime();
     if (elapsed < OTP_COOLDOWN_MS) {
@@ -138,12 +140,16 @@ exports.sendOtp = async (rawEmail) => {
     }
   }
 
-  // Invalidate any existing active or superseded OTPs for this email
-  await Otp.deleteMany({ email });
-
   // Generate a cryptographically secure 6-digit OTP
   const otp = String(crypto.randomInt(100000, 1000000));
   const hashedOtp = hashOtp(otp);
+
+  // Deliver the OTP via Resend email service FIRST (never save or pretend if email fails!)
+  await emailService.sendOtpEmail({ to: email, otp });
+
+  // Invalidate any existing active or superseded OTPs for this email and purpose
+  await Otp.deleteMany({ email, purpose: safePurpose });
+
   const now = new Date();
   const expiresAt = new Date(now.getTime() + OTP_EXPIRY_MS);
 
@@ -151,17 +157,16 @@ exports.sendOtp = async (rawEmail) => {
   await Otp.create({
     email,
     hashedOtp,
+    purpose: safePurpose,
     attempts: 0,
     lastResendAt: now,
     expiresAt,
   });
 
-  // Deliver the OTP via Resend email service
-  await emailService.sendOtpEmail({ to: email, otp });
-
   // Never expose plaintext OTP in response or production logs
   return {
     sent: true,
+    email,
     expiresIn: 300,
     resendCooldown: 60,
   };
@@ -171,14 +176,15 @@ exports.sendOtp = async (rawEmail) => {
  * Verifies the 6-digit OTP using constant-time hash comparison.
  * Enforces maximum 3 attempts before permanently invalidating the OTP.
  */
-exports.verifyOtp = async ({ email: rawEmail, otp }) => {
+exports.verifyOtp = async ({ email: rawEmail, otp, purpose = 'verification' }) => {
   if (!rawEmail || !otp) {
     throw new AppError('Email and OTP are both required', 422);
   }
   const email = rawEmail.toLowerCase().trim();
   const cleanOtp = String(otp).trim();
+  const safePurpose = ['registration', 'login', 'verification'].includes(purpose) ? purpose : 'verification';
 
-  const record = await Otp.findOne({ email });
+  const record = await Otp.findOne({ email, purpose: safePurpose });
   if (!record) {
     throw new AppError('Verification code expired or not requested. Please request a new code.', 401);
   }
@@ -227,8 +233,12 @@ exports.verifyOtp = async ({ email: rawEmail, otp }) => {
       name: 'New Member',
       email,
       role: 'customer', // Always default to customer; cannot self-assign admin
+      isEmailVerified: true,
       profileComplete: false,
     });
+  } else {
+    user.isEmailVerified = true;
+    await user.save();
   }
 
   if (!user.isActive) {

@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, select: false },
     role: { type: String, enum: ROLES, default: 'customer', index: true },
     username: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
+    isEmailVerified: { type: Boolean, default: false },
     profileComplete: { type: Boolean, default: false },
     securityQuestions: { type: mongoose.Schema.Types.Mixed, select: false },
     bankAccount: { type: mongoose.Schema.Types.Mixed },

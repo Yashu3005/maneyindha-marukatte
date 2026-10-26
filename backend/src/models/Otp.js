@@ -13,10 +13,20 @@ const otpSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    purpose: {
+      type: String,
+      enum: ['registration', 'login', 'verification'],
+      default: 'verification',
+      index: true,
+    },
     attempts: {
       type: Number,
       default: 0,
       min: 0,
+    },
+    isConsumed: {
+      type: Boolean,
+      default: false,
     },
     lastResendAt: {
       type: Date,

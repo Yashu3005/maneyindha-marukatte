@@ -4,16 +4,17 @@ const AppError = require('../utils/AppError');
 const RESEND_API_URL = 'https://api.resend.com/emails';
 
 /**
- * Builds the branded HTML email for OTP delivery.
+ * Builds the branded, responsive HTML email for OTP verification.
+ * Subject: Verify Your Email – Maneyindha Marukatte
  */
 function buildOtpEmailHtml(otp) {
   return `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Your Verification Code - Maneyindha Marukatte</title>
+  <title>Verify Your Email – Maneyindha Marukatte</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #FAF7F2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E281C;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #FAF7F2; padding: 40px 15px;">
@@ -27,7 +28,7 @@ function buildOtpEmailHtml(otp) {
                 MANEYINDHA MARUKATTE
               </h1>
               <p style="margin: 6px 0 0 0; color: #D2DEC9; font-size: 13px; font-weight: 500;">
-                ಮನೆಯಿಂದ ಮಾರುಕಟ್ಟೆ · From Home to Marketplace
+                ಮನೆಯಿಂದ ಮಾರುಕಟ್ಟೆ · Empowering Home-Based Women Entrepreneurs
               </p>
             </td>
           </tr>
@@ -36,10 +37,10 @@ function buildOtpEmailHtml(otp) {
           <tr>
             <td style="padding: 36px 32px;">
               <h2 style="margin: 0 0 12px 0; color: #263A23; font-family: Georgia, serif; font-size: 20px;">
-                Your Verification Code
+                Verify Your Email Address
               </h2>
               <p style="margin: 0 0 24px 0; color: #4E5E4C; font-size: 15px; line-height: 1.5;">
-                Welcome to Maneyindha Marukatte. Use the single-use code below to complete your login or registration:
+                Welcome to Maneyindha Marukatte. Please use the six-digit verification code below to verify your email address:
               </p>
 
               <!-- OTP Code Display -->
@@ -49,18 +50,18 @@ function buildOtpEmailHtml(otp) {
                 </span>
               </div>
 
-              <!-- Important Notices -->
-              <table role="presentation" width="100%" style="background-color: #EFF5EC; border-radius: 10px; padding: 12px 16px; margin-bottom: 24px;">
+              <!-- Expiry & Security Notice -->
+              <table role="presentation" width="100%" style="background-color: #EFF5EC; border-radius: 10px; padding: 14px 16px; margin-bottom: 24px;">
                 <tr>
                   <td style="color: #263A23; font-size: 13px; line-height: 1.5;">
-                    ⏱ <strong>Valid for 5 minutes only.</strong><br>
-                    🔒 Never share this code with anyone. Our team will never ask for your OTP.
+                    ⏱ <strong>This code is valid for 5 minutes only.</strong><br>
+                    🔒 <strong>Security Notice:</strong> Do not share this OTP with anyone. Our support team will never ask for your verification code.
                   </td>
                 </tr>
               </table>
 
               <p style="margin: 0; color: #7A8A78; font-size: 13px; line-height: 1.5;">
-                If you did not request this verification code, please disregard this email or contact support if you have concerns.
+                If you did not request this verification code, please ignore this email. No changes will be made to your account.
               </p>
             </td>
           </tr>
@@ -68,7 +69,7 @@ function buildOtpEmailHtml(otp) {
           <!-- Footer -->
           <tr>
             <td style="background-color: #FAF7F2; padding: 20px 32px; text-align: center; border-top: 1px solid #E7DFD0;">
-              <p style="margin: 0; color: #7A8A78; font-size: 12px;">
+              <p style="margin: 0; color: #7A8A78; font-size: 12px; line-height: 1.4;">
                 Empowering home-based women entrepreneurs across India.<br>
                 © ${new Date().getFullYear()} Maneyindha Marukatte. All rights reserved.
               </p>
@@ -84,37 +85,39 @@ function buildOtpEmailHtml(otp) {
 }
 
 /**
- * Sends a 6-digit OTP email to the given recipient via Resend.
+ * Dispatches a real verification OTP email to the exact recipient address via Resend.
+ *
+ * Never simulates delivery: if credentials are missing or Resend rejects the request,
+ * throws an explicit AppError.
  *
  * @param {Object} options
- * @param {string} options.to - Recipient email
- * @param {string} options.otp - Plain 6-digit OTP
- * @returns {Promise<{ delivered: boolean, id?: string }>}
+ * @param {string} options.to - Exact recipient email address
+ * @param {string} options.otp - 6-digit OTP string
+ * @returns {Promise<{ delivered: boolean, id: string }>}
  */
 async function sendOtpEmail({ to, otp }) {
   if (!to || !otp) {
-    throw new AppError('Recipient email and OTP are required for delivery', 400);
+    throw new AppError('Recipient email address and OTP are required for delivery', 400);
   }
 
   const apiKey = process.env.RESEND_API_KEY;
   const fromAddress = process.env.EMAIL_FROM || 'Maneyindha Marukatte <onboarding@resend.dev>';
 
-  // Development / sandbox fallback when no API key has been configured yet
-  if (!apiKey || apiKey === 're_your_api_key_here') {
-    if (process.env.NODE_ENV === 'production') {
-      logger.error('RESEND_API_KEY is not configured in production environment');
-      throw new AppError('Email delivery service is currently not configured', 503);
-    }
-    logger.warn(`[EmailService] Simulated OTP delivery to ${to} (RESEND_API_KEY not configured)`);
-    return { delivered: true, simulated: true };
+  // Explicit failure if the real API key is missing — NEVER simulate delivery
+  if (!apiKey || apiKey.startsWith('re_placeholder') || apiKey === 'your_api_key') {
+    logger.error('RESEND_API_KEY is not configured in backend environment');
+    throw new AppError(
+      'Email delivery service is not configured. Please set a valid RESEND_API_KEY in your backend .env file.',
+      503
+    );
   }
 
   const payload = {
     from: fromAddress,
     to: [to],
-    subject: `${otp} is your Maneyindha Marukatte verification code`,
+    subject: 'Verify Your Email – Maneyindha Marukatte',
     html: buildOtpEmailHtml(otp),
-    text: `Your Maneyindha Marukatte verification code is: ${otp}\n\nThis code is valid for 5 minutes. Never share this code with anyone.`,
+    text: `Welcome to Maneyindha Marukatte.\n\nYour 6-digit verification code is: ${otp}\n\nThis code is valid for 5 minutes only.\nDo not share this code with anyone. If you did not request this code, you can safely ignore this email.`,
   };
 
   try {
@@ -127,19 +130,23 @@ async function sendOtpEmail({ to, otp }) {
       body: JSON.stringify(payload),
     });
 
+    const data = await res.json().catch(() => ({}));
+
     if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      logger.error('Resend API delivery failure:', { status: res.status, error: errBody });
-      throw new AppError(errBody.message || 'Failed to dispatch verification email via Resend', 502);
+      logger.error('Resend API rejected email dispatch:', { status: res.status, error: data });
+      const errorMessage = data.message || `Resend email delivery failed (status ${res.status})`;
+      throw new AppError(`Email delivery failed: ${errorMessage}`, 502);
     }
 
-    const data = await res.json();
-    logger.info(`OTP email successfully dispatched to ${to}`, { messageId: data.id });
+    logger.info(`Real OTP email successfully dispatched via Resend to ${to}`, { messageId: data.id });
     return { delivered: true, id: data.id };
   } catch (error) {
     if (error instanceof AppError) throw error;
-    logger.error('Unexpected error in email dispatch:', error);
-    throw new AppError('Unable to send verification email. Please check your network or try again.', 502);
+    logger.error('Network or transport failure during email delivery:', error);
+    throw new AppError(
+      'Unable to deliver verification email. Please verify your internet connection or email service configuration.',
+      502
+    );
   }
 }
 

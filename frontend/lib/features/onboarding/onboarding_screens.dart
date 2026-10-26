@@ -410,6 +410,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   bool _busy = false;
   String? _error;
   int _cooldownSeconds = 60;
+  int _expirySeconds = 300; // 5-minute countdown UI aid
   Timer? _timer;
 
   @override
@@ -420,18 +421,29 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
   void _startCooldownTimer() {
     _timer?.cancel();
-    setState(() => _cooldownSeconds = 60);
+    setState(() {
+      _cooldownSeconds = 60;
+      _expirySeconds = 300;
+    });
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
       }
-      if (_cooldownSeconds > 0) {
-        setState(() => _cooldownSeconds--);
-      } else {
+      setState(() {
+        if (_cooldownSeconds > 0) _cooldownSeconds--;
+        if (_expirySeconds > 0) _expirySeconds--;
+      });
+      if (_cooldownSeconds == 0 && _expirySeconds == 0) {
         timer.cancel();
       }
     });
+  }
+
+  String _formatExpiry() {
+    final mins = _expirySeconds ~/ 60;
+    final secs = _expirySeconds % 60;
+    return '${mins.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -533,19 +545,29 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: MMColors.sageLight,
+              color: _expirySeconds > 0 ? MMColors.sageLight : const Color(0xFFFFECEC),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: MMColors.sage),
+              border: Border.all(color: _expirySeconds > 0 ? MMColors.sage : const Color(0xFFF5B5B5)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.timer_outlined, size: 16, color: MMColors.deepOlive),
+                Icon(
+                  Icons.timer_outlined,
+                  size: 16,
+                  color: _expirySeconds > 0 ? MMColors.deepOlive : const Color(0xFFBA1A1A),
+                ),
                 const SizedBox(width: 8),
                 Text(
-                  'Code valid for 5 minutes · Check spam if not in inbox',
-                  style: sans(12, weight: FontWeight.w500, color: MMColors.deepOlive),
+                  _expirySeconds > 0
+                      ? 'Code expires in ${_formatExpiry()} · Check spam if needed'
+                      : 'Verification code has expired. Please resend a new code.',
+                  style: sans(
+                    12,
+                    weight: FontWeight.w600,
+                    color: _expirySeconds > 0 ? MMColors.deepOlive : const Color(0xFFBA1A1A),
+                  ),
                 ),
               ],
             ),
@@ -577,16 +599,27 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             onTap: _verify,
           ),
           const SizedBox(height: 16),
-          Center(
-            child: TextButton.icon(
-              icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: Text(
-                _cooldownSeconds > 0
-                    ? 'Resend Code in ${_cooldownSeconds}s'
-                    : 'Resend Code',
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: Text(
+                  _cooldownSeconds > 0
+                      ? 'Resend Code in ${_cooldownSeconds}s'
+                      : 'Resend Code',
+                ),
+                onPressed: (_cooldownSeconds > 0 || _busy) ? null : _resend,
               ),
-              onPressed: (_cooldownSeconds > 0 || _busy) ? null : _resend,
-            ),
+              const SizedBox(width: 8),
+              const Text('•', style: TextStyle(color: MMColors.textMuted)),
+              const SizedBox(width: 8),
+              TextButton.icon(
+                icon: const Icon(Icons.edit_outlined, size: 15),
+                label: const Text('Change Email'),
+                onPressed: _busy ? null : () => context.pop(),
+              ),
+            ],
           ),
         ],
       ),
