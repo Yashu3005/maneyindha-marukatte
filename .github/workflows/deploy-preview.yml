@@ -1,0 +1,16 @@
+name: Vercel Preview
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Recommended: connect the repo directly in the Vercel dashboard
+      # (GitHub integration) so previews are automatic. This workflow is
+      # only needed if you prefer CLI-driven deploys:
+      # - run: npx vercel deploy --token=${{ secrets.VERCEL_TOKEN }}
+      - run: echo "Vercel GitHub integration handles preview deployments."
