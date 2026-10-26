@@ -7,7 +7,7 @@ const AppError = require('../utils/AppError');
 const cartService = require('./cart.service');
 const { VALID_TRANSITIONS } = require('../models/Order');
 
-exports.createOrder = async (customerId, { businessId, items, deliveryAddress, isSelfPickup, notes, couponCode }) => {
+exports.createOrder = async (customerId, { businessId, items, deliveryAddress, isSelfPickup, notes, couponCode, paymentMethod = 'cod' }) => {
   if (!items?.length) throw new AppError('Order must contain at least one item', 422);
 
   // Server-side pricing — never trust client totals.
@@ -55,6 +55,10 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
     deliveryAddress,
     isSelfPickup: !!isSelfPickup,
     notes,
+    payment: {
+      method: ['razorpay', 'cod'].includes(paymentMethod) ? paymentMethod : 'cod',
+      status: 'pending',
+    },
     statusHistory: [{ status: 'pending', at: new Date() }],
   });
 
