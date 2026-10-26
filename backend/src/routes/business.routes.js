@@ -1,14 +1,36 @@
 const router = require('express').Router();
 const Joi = require('joi');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireRole, optionalAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const businessController = require('../controllers/business.controller');
+
+const optStr = (max) => Joi.string().trim().max(max).allow('');
 
 router.get('/', businessController.list);
 router.get('/mine', requireAuth, requireRole('entrepreneur'), businessController.mine);
 router.get('/nearby', businessController.nearby);          // ?lat=&lng=&radiusKm=
-router.get('/:id', businessController.getById);
-router.post('/', requireAuth, requireRole('entrepreneur'), businessController.create);
+router.get('/:id', optionalAuth, businessController.getById);
+router.post('/', requireAuth, requireRole('entrepreneur'),
+  validate(Joi.object({
+    name: Joi.string().trim().min(2).max(120).required(),
+    description: optStr(2000),
+    category: Joi.string().trim().max(100),          // ObjectId or category name
+    logoUrl: Joi.string().uri(),
+    bannerUrl: Joi.string().uri(),
+    gallery: Joi.array().items(Joi.string().uri()).max(20),
+    location: Joi.object({
+      type: Joi.string().valid('Point'),
+      coordinates: Joi.array().ordered(
+        Joi.number().min(-180).max(180), Joi.number().min(-90).max(90)).length(2).required(),
+    }),
+    address: Joi.object({ line1: optStr(200), city: optStr(100), state: optStr(100), pincode: optStr(10) }),
+    workingHours: Joi.array().items(Joi.object({
+      day: Joi.number().integer().min(0).max(6), open: optStr(10), close: optStr(10), closed: Joi.boolean(),
+    })).max(7),
+    gstNumber: optStr(20),
+    yearsOfExperience: optStr(30),
+  })),
+  businessController.create);
 
 // Verification documents (entrepreneur submits → status: in_review)
 router.post('/:id/verification-documents',

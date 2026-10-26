@@ -1,6 +1,6 @@
 /* Seed dev data with Pexels photos when PEXELS_API_KEY is set.
    Usage: npm run seed */
-require('dotenv').config();
+require('../src/config/env').loadEnv();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -60,7 +60,7 @@ async function run() {
   const oldShops = await Business.find(
     { slug: { $in: ['ashas-home-bakes', 'kala-crafts', 'ruchi-tiffins'] } }).select('_id');
   await Promise.all([
-    User.deleteMany({ email: { $in: ['admin@mm.dev', 'asha@mm.dev', 'customer@mm.dev', 'delivery@mm.dev'] } }),
+    User.deleteMany({ email: { $in: ['admin@mm.dev', 'asha@mm.dev', 'customer@mm.dev'] } }),
     Product.deleteMany({ business: { $in: oldShops.map((b) => b._id) } }),
     Business.deleteMany({ slug: { $in: ['ashas-home-bakes', 'kala-crafts', 'ruchi-tiffins'] } }),
     Coupon.deleteMany({ code: 'WELCOME10' }),
@@ -70,8 +70,7 @@ async function run() {
   const [, asha] = await User.create([
     { name: 'Admin', email: 'admin@mm.dev', passwordHash: hash, role: 'admin', profileComplete: true },
     { name: 'Asha', email: 'asha@mm.dev', passwordHash: hash, role: 'entrepreneur', profileComplete: true },
-    { name: 'Priya', email: 'customer@mm.dev', passwordHash: hash, role: 'customer', profileComplete: true, coins: 50 },
-    { name: 'Ravi', email: 'delivery@mm.dev', passwordHash: hash, role: 'delivery_partner', profileComplete: true },
+    { name: 'Priya', email: 'customer@mm.dev', passwordHash: hash, role: 'customer', profileComplete: true },
   ]);
 
   const catNames = ['Baking', 'Handicrafts', 'Tiffin & Meals', 'Boutique', 'Home Decor'];
@@ -141,8 +140,7 @@ async function run() {
 Seed complete.
   admin@mm.dev / password123      (admin)
   asha@mm.dev / password123       (entrepreneur)
-  customer@mm.dev / password123   (customer, 50 coins)
-  delivery@mm.dev / password123   (delivery partner)
+  customer@mm.dev / password123   (customer)
   Coupon: WELCOME10 (10% off, min ₹199)
 `);
   await mongoose.disconnect();

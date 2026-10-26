@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
-import '../../services/cloudinary.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
 
@@ -86,7 +85,7 @@ class _DashboardTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     final shops = ref.watch(myBusinessesProvider);
-    final orders = ref.watch(sellerOrdersProvider);
+    final orders = ref.watch(ordersProvider);
 
     return Container(
       color: MMColors.olive,
@@ -139,18 +138,6 @@ class _DashboardTab extends ConsumerWidget {
                 ],
               );
             },
-          ),
-          const SizedBox(height: 20),
-          orders.when(
-            loading: () => const SizedBox.shrink(),
-            error: (e, _) => const SizedBox.shrink(),
-            data: (items) => _WeekChart(orders: items),
-          ),
-          const SizedBox(height: 16),
-          orders.when(
-            loading: () => const SizedBox.shrink(),
-            error: (e, _) => const SizedBox.shrink(),
-            data: (items) => _SalesChart(orders: items),
           ),
           const SizedBox(height: 20),
           Text('Recent Orders', style: serif(18, color: MMColors.cream)),
@@ -223,22 +210,6 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
                   child: Text(imageUrl == null ? 'Product photo:' : 'Photo selected ✓'),
                 ),
                 const SizedBox(height: 6),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.upload_file, size: 18),
-                    label: const Text('Upload photo'),
-                    onPressed: () async {
-                      final url = await pickAndUploadImage();
-                      if (url != null) setD(() => imageUrl = url);
-                    },
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('or pick a stock photo:'),
-                ),
                 Consumer(builder: (c, r, _) {
                   final photos = r.watch(imagesProvider(
                       name.text.trim().isEmpty ? 'handmade product' : name.text.trim()));
@@ -400,7 +371,7 @@ class _SellerOrdersTab extends ConsumerWidget {
   Future<void> _transition(BuildContext context, WidgetRef ref, String id, String status) async {
     try {
       await ApiClient.dio.patch('/orders/$id/status', data: {'status': status});
-      ref.invalidate(sellerOrdersProvider);
+      ref.invalidate(ordersProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
@@ -411,7 +382,7 @@ class _SellerOrdersTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orders = ref.watch(sellerOrdersProvider);
+    final orders = ref.watch(ordersProvider);
     const nextStep = {
       'pending': 'confirmed',
       'confirmed': 'preparing',
@@ -427,7 +398,7 @@ class _SellerOrdersTab extends ConsumerWidget {
           child: orders.when(
             loading: () => const LoadingView(),
             error: (e, _) => ErrorView(
-                message: apiError(e), onRetry: () => ref.invalidate(sellerOrdersProvider)),
+                message: apiError(e), onRetry: () => ref.invalidate(ordersProvider)),
             data: (items) => items.isEmpty
                 ? const EmptyView(message: 'No orders yet.')
                 : ListView.separated(
@@ -474,7 +445,7 @@ class _EarningsTab extends ConsumerWidget {
   const _EarningsTab();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orders = ref.watch(sellerOrdersProvider);
+    final orders = ref.watch(ordersProvider);
     return SafeArea(
       child: orders.when(
         loading: () => const LoadingView(),
@@ -656,62 +627,9 @@ class _SellerProfileTab extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 await ref.read(authProvider.notifier).switchRole('customer');
-                ref.invalidate(sellerOrdersProvider);
+                ref.invalidate(ordersProvider);
                 ref.invalidate(cartProvider);
                 if (context.mounted) context.go('/app');
-              },
-            ),
-            ListTile(
-              title: const Text('Share an update (community)'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                final caption = TextEditingController();
-                String? image;
-                final posted = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => StatefulBuilder(builder: (ctx2, setD) {
-                    return AlertDialog(
-                      title: const Text('Share an update'),
-                      content: Column(mainAxisSize: MainAxisSize.min, children: [
-                        TextField(controller: caption, maxLines: 3,
-                            decoration: const InputDecoration(
-                                hintText: 'What\'s new in your shop?')),
-                        const SizedBox(height: 10),
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.image, size: 18),
-                          label: Text(image == null ? 'Add photo' : 'Photo added ✓'),
-                          onPressed: () async {
-                            final url = await pickAndUploadImage();
-                            if (url != null) setD(() => image = url);
-                          },
-                        ),
-                      ]),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('Cancel')),
-                        FilledButton(onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('Post')),
-                      ],
-                    );
-                  }),
-                );
-                if (posted == true && caption.text.trim().isNotEmpty) {
-                  try {
-                    await ApiClient.dio.post('/community', data: {
-                      'caption': caption.text.trim(),
-                      if (image != null) 'image': image,
-                    });
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Posted to the community 🌸')));
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context)
-                          .showSnackBar(SnackBar(content: Text(apiError(e))));
-                    }
-                  }
-                }
               },
             ),
             ListTile(
@@ -759,172 +677,6 @@ class _SellerProfileTab extends ConsumerWidget {
               },
             ),
           ])),
-        ]),
-      ),
-    );
-  }
-}
-
-
-/// Simple 7-day delivered-sales bar chart (no chart package needed).
-class _WeekChart extends StatelessWidget {
-  final List<Map<String, dynamic>> orders;
-  const _WeekChart({required this.orders});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final days = List.generate(
-        7,
-        (i) => DateTime(now.year, now.month, now.day)
-            .subtract(Duration(days: 6 - i)));
-    final values = days.map((d) {
-      num sum = 0;
-      for (final o in orders) {
-        if (o['status'] != 'delivered') continue;
-        final created = DateTime.tryParse(o['createdAt']?.toString() ?? '');
-        if (created == null) continue;
-        if (DateTime(created.year, created.month, created.day) == d) {
-          sum += ((o['amounts'] as Map?)?['total'] ?? 0) as num;
-        }
-      }
-      return sum;
-    }).toList();
-    final maxV = values.fold<num>(0, (m, v) => v > m ? v : m);
-    const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    return Card(
-      color: MMColors.cream,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Sales — last 7 days', style: serif(15)),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 120,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(7, (i) {
-                final h = maxV == 0
-                    ? 4.0
-                    : (8 + 74 * values[i] / maxV).toDouble();
-                return Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (values[i] > 0)
-                        Text('₹${values[i]}',
-                            style: const TextStyle(fontSize: 10)),
-                      const SizedBox(height: 2),
-                      Container(
-                        height: h,
-                        margin: const EdgeInsets.symmetric(horizontal: 5),
-                        decoration: BoxDecoration(
-                          color: values[i] > 0
-                              ? MMColors.olive
-                              : MMColors.sage,
-                          borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(4)),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(wd[days[i].weekday - 1],
-                          style: const TextStyle(fontSize: 10)),
-                    ],
-                  ),
-                );
-              }),
-            ),
-          ),
-          if (maxV == 0)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Text('Deliveries will light this chart up 📈',
-                  style: TextStyle(fontSize: 12)),
-            ),
-        ]),
-      ),
-    );
-  }
-}
-
-
-/// Last-7-days earnings bar chart (delivered orders), no chart package needed.
-class _SalesChart extends StatelessWidget {
-  final List<Map<String, dynamic>> orders;
-  const _SalesChart({required this.orders});
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final days = List.generate(7, (i) {
-      final day = DateTime(now.year, now.month, now.day)
-          .subtract(Duration(days: 6 - i));
-      num total = 0;
-      var count = 0;
-      for (final o in orders) {
-        if (o['status'] != 'delivered') continue;
-        final created = DateTime.tryParse(o['createdAt']?.toString() ?? '');
-        if (created == null) continue;
-        final d = DateTime(created.year, created.month, created.day);
-        if (d == day) {
-          total += ((o['amounts'] as Map?)?['total'] ?? 0) as num;
-          count++;
-        }
-      }
-      return (day, total, count);
-    });
-
-    final maxTotal = days.fold<num>(0, (m, d) => d.$2 > m ? d.$2 : m);
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-    return Card(
-      color: MMColors.cream,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Sales — last 7 days', style: serif(16)),
-          const SizedBox(height: 4),
-          Text(maxTotal == 0
-              ? 'Deliveries will show up here.'
-              : 'Peak day: ${rupees(maxTotal)}'),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 120,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: days.map((d) {
-                final heightFactor =
-                    maxTotal == 0 ? 0.0 : (d.$2 / maxTotal).clamp(0.0, 1.0);
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (d.$2 > 0)
-                          Text('${d.$3}',
-                              style: const TextStyle(fontSize: 10)),
-                        const SizedBox(height: 2),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 500),
-                          height: 8 + 84 * heightFactor,
-                          decoration: BoxDecoration(
-                            color: d.$2 > 0 ? MMColors.olive : MMColors.sage,
-                            borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(6)),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(weekdays[d.$1.weekday - 1],
-                            style: const TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
         ]),
       ),
     );

@@ -9,10 +9,6 @@ router.use('/cart', require('./cart.routes'));
 router.use('/reviews', require('./review.routes'));
 router.use('/wishlist', require('./wishlist.routes'));
 router.use('/admin', require('./admin.routes'));
-router.use('/payments', require('./payment.routes'));
-router.use('/notifications', require('./notification.routes'));
-router.use('/community', require('./community.routes'));
-router.use('/delivery', require('./delivery.routes'));
 router.use('/images', require('./images.routes'));
 
 module.exports = router;

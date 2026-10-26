@@ -6,9 +6,13 @@ const adminController = require('../controllers/admin.controller');
 
 router.use(requireAuth, requireRole('admin', 'super_admin'));
 
-router.get('/stats', adminController.stats);
-router.get('/verifications', adminController.listVerifications);
-router.patch('/users/:userId/active', adminController.setUserActive); // ?status=pending|in_review|approved|rejected
+router.get('/verifications',
+  validate(Joi.object({
+    status: Joi.string().valid('pending', 'in_review', 'approved', 'rejected'),
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1).max(100),
+  }), 'query'),
+  adminController.listVerifications); // ?status=pending|in_review|approved|rejected
 router.post('/verifications/:businessId',
   validate(Joi.object({
     action: Joi.string().valid('approve', 'reject', 'request_info').required(),

@@ -1,33 +1,29 @@
-// Vercel serverless entry — cached DB connection, resilient errors.
-require('dotenv').config();
+// Vercel serverless entry — wraps the Express app with a cached DB connection.
+// NOTE: Socket.IO and the in-memory OTP store need a persistent server; see docs/deployment.md.
+const { loadEnv, assertEnv } = require('../src/config/env');
+loadEnv();
 const mongoose = require('mongoose');
 const app = require('../src/app');
 
 let ready = null;
 function ensureDb() {
   if (!ready) {
+    assertEnv();
     mongoose.set('strictQuery', true);
-    ready = mongoose
-      .connect(process.env.MONGODB_URI, { serverSelectionTimeoutMS: 8000 })
-      .catch((e) => {
-        ready = null; // allow retry on next request
-        throw e;
-      });
+    ready = mongoose.connect(process.env.MONGODB_URI).catch((err) => {
+      ready = null; // don't cache a failed connect for the life of the instance
+      throw err;
+    });
   }
   return ready;
 }
 
 module.exports = async (req, res) => {
   try {
-    if (!req.url.startsWith('/health')) await ensureDb();
-    return app(req, res);
-  } catch (e) {
-    console.error('DB/init error:', e.message);
-    res.statusCode = 500;
-    res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({
-      success: false,
-      error: { message: 'Database connection failed: ' + e.message },
-    }));
+    await ensureDb();
+  } catch (err) {
+    console.error('DB connection failed:', err.message);
+    return res.status(503).json({ success: false, error: { message: 'Service temporarily unavailable' } });
   }
+  return app(req, res);
 };

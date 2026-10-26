@@ -12,9 +12,6 @@ import '../features/cart/cart_screen.dart';
 import '../features/checkout/checkout_screen.dart';
 import '../features/orders/orders_screen.dart';
 import '../features/admin/admin_screen.dart';
-import '../features/notifications/notifications_screen.dart';
-import '../features/wishlist/wishlist_screen.dart';
-import '../features/delivery/delivery_shell.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -52,9 +49,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/checkout', builder: (_, __) => const CheckoutScreen()),
       GoRoute(path: '/orders', builder: (_, __) => const OrdersScreen()),
       GoRoute(path: '/admin', builder: (_, __) => const AdminScreen()),
-      GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
-      GoRoute(path: '/wishlist', builder: (_, __) => const WishlistScreen()),
-      GoRoute(path: '/delivery', builder: (_, __) => const DeliveryShell()),
     ],
   );
 });

@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
-import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../shared/widgets.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
@@ -19,8 +17,6 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _pincode = TextEditingController();
   bool _selfPickup = false;
   bool _placing = false;
-  bool _payOnline = false;
-  bool _useCoins = false;
 
   Future<void> _placeOrder(Map<String, dynamic> cart) async {
     setState(() => _placing = true);
@@ -34,7 +30,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final business = cart['business'];
       final businessId = business is Map ? business['_id'] : business;
 
-      final orderRes = await ApiClient.dio.post('/orders', data: {
+      await ApiClient.dio.post('/orders', data: {
         'businessId': businessId,
         'items': items,
         'isSelfPickup': _selfPickup,
@@ -45,24 +41,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
             'pincode': _pincode.text.trim(),
           },
         if (cart['coupon'] != null) 'couponCode': cart['coupon'],
-        'useCoins': _useCoins,
       });
-      final orderId = (orderRes.data['data'] as Map)['_id'].toString();
 
       ref.invalidate(cartProvider);
       ref.invalidate(ordersProvider);
-
-      if (_payOnline) {
-        final linkRes = await ApiClient.dio
-            .post('/payments/link', data: {'orderId': orderId});
-        final url = (linkRes.data['data'] as Map)['url'].toString();
-        await launchUrl(Uri.parse(url));
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Complete the payment, then tap "Verify payment" on your order.')));
-          context.go('/orders');
-        }
-      } else if (mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Order placed 🎉 Pay on delivery.')));
         context.go('/orders');
@@ -142,30 +125,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Consumer(builder: (c, r, _) {
-                    final coins = (r.watch(authProvider).user?['coins'] ?? 0) as num;
-                    if (coins <= 0) return const SizedBox.shrink();
-                    return SwitchListTile(
-                      title: Text('Use my coins (🪙 $coins = ₹$coins off)'),
-                      value: _useCoins,
-                      onChanged: (v) => setState(() => _useCoins = v),
-                    );
-                  }),
-                  const SizedBox(height: 12),
-                  Text('Payment', style: Theme.of(context).textTheme.titleLarge),
-                  RadioListTile<bool>(
-                    title: const Text('Cash on delivery'),
-                    value: false,
-                    groupValue: _payOnline,
-                    onChanged: (v) => setState(() => _payOnline = v ?? false),
-                  ),
-                  RadioListTile<bool>(
-                    title: const Text('Pay online (UPI / cards / wallets)'),
-                    subtitle: const Text('Opens a secure Razorpay page'),
-                    value: true,
-                    groupValue: _payOnline,
-                    onChanged: (v) => setState(() => _payOnline = v ?? false),
-                  ),
+                  Text('Payment: Cash on delivery (online payments arrive in Phase 8)',
+                      style: Theme.of(context).textTheme.bodySmall),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: (canPlace && !_placing) ? () => _placeOrder(c) : null,

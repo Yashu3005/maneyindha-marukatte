@@ -7,7 +7,7 @@ exports.listVerificationRequests = async ({ status = 'pending', page = 1, limit 
   const [items, total] = await Promise.all([
     Business.find(filter).sort('createdAt')
       .skip((page - 1) * limit).limit(Number(limit))
-      .populate('owner', 'name email phone isActive'),
+      .populate('owner', 'name email phone'),
     Business.countDocuments(filter),
   ]);
   return { items, meta: { page: Number(page), limit: Number(limit), total } };
@@ -62,39 +62,4 @@ exports.uploadVerificationDocs = async (ownerId, businessId, documents) => {
   business.verification.status = 'in_review';
   await business.save();
   return business;
-};
-
-exports.stats = async () => {
-  const User = require('../models/User');
-  const Order = require('../models/Order');
-  const Product = require('../models/Product');
-  const [customers, entrepreneurs, businesses, approved, orders, products, revenueAgg] =
-    await Promise.all([
-      User.countDocuments({ role: 'customer', isActive: true }),
-      User.countDocuments({ role: 'entrepreneur', isActive: true }),
-      Business.countDocuments({ isActive: true }),
-      Business.countDocuments({ 'verification.status': 'approved', isActive: true }),
-      Order.countDocuments({}),
-      Product.countDocuments({ isActive: true }),
-      Order.aggregate([
-        { $match: { status: 'delivered' } },
-        { $group: { _id: null, total: { $sum: '$amounts.total' } } },
-      ]),
-    ]);
-  return {
-    customers, entrepreneurs, businesses, approved, orders, products,
-    revenue: revenueAgg[0]?.total || 0,
-  };
-};
-
-exports.setUserActive = async (userId, isActive) => {
-  const User = require('../models/User');
-  const user = await User.findById(userId);
-  if (!user) throw new AppError('User not found', 404);
-  if (['admin', 'super_admin'].includes(user.role)) {
-    throw new AppError('Cannot block an admin account', 403);
-  }
-  user.isActive = isActive;
-  await user.save();
-  return { id: user._id, isActive: user.isActive };
 };

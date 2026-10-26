@@ -36,8 +36,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> _apply(Map<String, dynamic> data) async {
-    await TokenStore.save(
-        data['accessToken'] as String?, data['refreshToken'] as String?);
+    await TokenStore.save(data['accessToken'] as String?,
+        refresh: data['refreshToken'] as String?);
     await _saveUser(Map<String, dynamic>.from(data['user'] as Map));
   }
 
@@ -95,7 +95,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    await TokenStore.save(null, null);
+    await TokenStore.save(null);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('user');
     state = const AuthState();

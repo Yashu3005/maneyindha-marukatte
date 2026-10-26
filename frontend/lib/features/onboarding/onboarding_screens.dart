@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
-import '../../services/cloudinary.dart';
 import '../../theme/app_theme.dart';
+import '../../shared/mm_logo.dart';
 
 /// Shared olive canvas used across the Figma onboarding flow.
 class OliveScaffold extends StatelessWidget {
@@ -74,103 +74,61 @@ class CreamButton extends StatelessWidget {
   }
 }
 
-Widget wordmark({double size = 30, Color color = Colors.white}) =>
-    Image.asset('assets/logo.png', width: size * 5.2);
+Widget wordmark({double size = 30, Color color = Colors.white}) => Column(children: [
+      MMLogo(size: size * 2.6),
+      const SizedBox(height: 10),
+      Text('MANEYINDHA', style: serif(size, color: color)),
+      Text('MARUKATTE', style: serif(size, color: color)),
+    ]);
 
-// ---------------- 1. Landing (animated splash) ----------------
-class LandingScreen extends ConsumerStatefulWidget {
+// ---------------- 1. Landing ----------------
+class LandingScreen extends ConsumerWidget {
   const LandingScreen({super.key});
-  @override
-  ConsumerState<LandingScreen> createState() => _LandingScreenState();
-}
-
-class _LandingScreenState extends ConsumerState<LandingScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1800))
-    ..forward();
-  late final Animation<double> _logoScale = CurvedAnimation(
-      parent: _c, curve: const Interval(0.0, 0.55, curve: Curves.elasticOut));
-  late final Animation<double> _logoFade = CurvedAnimation(
-      parent: _c, curve: const Interval(0.0, 0.25, curve: Curves.easeOut));
-  late final Animation<double> _rest = CurvedAnimation(
-      parent: _c, curve: const Interval(0.55, 1.0, curve: Curves.easeOutCubic));
 
   @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
-    return Scaffold(
-      backgroundColor: MMColors.olive,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: Column(children: [
-                // The brand mark pops onto the screen
-                FadeTransition(
-                  opacity: _logoFade,
-                  child: ScaleTransition(
-                    scale: _logoScale,
-                    child: Image.asset('assets/logo.png', width: 320),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                FadeTransition(
-                  opacity: _rest,
-                  child: Text('Made nearby, with love',
-                      style: serif(18, weight: FontWeight.w400, color: MMColors.cream)),
-                ),
-                const SizedBox(height: 36),
-                SlideTransition(
-                  position: Tween<Offset>(
-                          begin: const Offset(0, 0.5), end: Offset.zero)
-                      .animate(_rest),
-                  child: FadeTransition(
-                    opacity: _rest,
-                    child: Column(children: [
-                      CreamButton(
-                          label: 'Get Started',
-                          onTap: () => context.push('/onboarding/email')),
-                      if (auth.isLoggedIn) ...[
-                        const SizedBox(height: 12),
-                        CreamButton(
-                          label: 'Continue as ${auth.name}',
-                          onTap: () {
-                            if (auth.isAdmin) {
-                              context.go('/admin');
-                            } else if (auth.role == 'delivery_partner') {
-                              context.go('/delivery');
-                            } else if (auth.isEntrepreneur) {
-                              context.go('/seller');
-                            } else {
-                              context.go('/app');
-                            }
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      TextButton(
-                        onPressed: () => context.push('/login'),
-                        child: Text('Sign in with password',
-                            style: serif(15,
-                                weight: FontWeight.w400, color: MMColors.cream)),
-                      ),
-                    ]),
-                  ),
-                ),
-              ]),
-            ),
+    return OliveScaffold(
+      showBack: false,
+      child: Column(children: [
+        const SizedBox(height: 40),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: MMColors.cream,
+            borderRadius: BorderRadius.circular(20),
           ),
+          child: wordmark(color: MMColors.deepOlive),
         ),
-      ),
+        const SizedBox(height: 12),
+        Text('Made nearby, with love',
+            style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
+        const SizedBox(height: 48),
+        CreamButton(
+            label: 'Get Started',
+            onTap: () => context.push('/onboarding/email')),
+        if (auth.isLoggedIn) ...[
+          const SizedBox(height: 12),
+          CreamButton(
+            label: 'Continue as ${auth.name}',
+            onTap: () {
+              if (auth.isAdmin) {
+                context.go('/admin');
+              } else if (auth.isEntrepreneur) {
+                context.go('/seller');
+              } else {
+                context.go('/app');
+              }
+            },
+          ),
+        ],
+        const SizedBox(height: 12),
+        TextButton(
+          onPressed: () => context.push('/login'),
+          child: Text('Sign in with password',
+              style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
+        ),
+      ]),
     );
   }
 }
@@ -352,21 +310,6 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         Text('Choose your photo (required):',
             style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 8),
-        CreamButton(
-          label: 'Upload from device',
-          onTap: () async {
-            try {
-              final url = await pickAndUploadImage();
-              if (url != null) setState(() => _avatarUrl = url);
-            } catch (e) {
-              setState(() => _error = apiError(e));
-            }
-          },
-        ),
-        const SizedBox(height: 10),
-        Text('or pick one:',
-            style: serif(12, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 6),
         SizedBox(
           height: 64,
           child: photos.when(
@@ -487,6 +430,7 @@ class _RoleScreenState extends ConsumerState<RoleScreen> {
         const SizedBox(height: 28),
         _roleCard('Customer', 'I want to buy Products', 'customer'),
         _roleCard('Women Entrepreneur', 'I want to sell products', 'entrepreneur'),
+        _roleCard('Both', 'I want to buy and sell Products', 'both'),
         const SizedBox(height: 8),
         Text('Note: You can change this later\nfrom your profile section',
             textAlign: TextAlign.center,

@@ -43,7 +43,6 @@ const orderSchema = new mongoose.Schema(
       total: Number,
     },
     coupon: { code: String, discount: Number },
-    coinsUsed: { type: Number, default: 0 },
     status: { type: String, enum: STATUSES, default: 'pending', index: true },
     statusHistory: [{ status: String, at: Date, by: { type: mongoose.Types.ObjectId, ref: 'User' } }],
     payment: {

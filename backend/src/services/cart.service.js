@@ -1,5 +1,6 @@
 const Cart = require('../models/Cart');
 const Product = require('../models/Product');
+const Business = require('../models/Business');
 const Coupon = require('../models/Coupon');
 const Order = require('../models/Order');
 const AppError = require('../utils/AppError');
@@ -15,7 +16,8 @@ exports.getCart = async (customerId) => {
 exports.addItem = async (customerId, { productId, quantity = 1, variant }) => {
   const product = await Product.findOne({ _id: productId, isActive: true });
   if (!product) throw new AppError('Product not found', 404);
-  if (product.stock < quantity) throw new AppError('Insufficient stock', 422);
+  const shop = await Business.findOne({ _id: product.business, isActive: true, 'verification.status': 'approved' }).select('_id');
+  if (!shop) throw new AppError('Product not found', 404);
 
   let cart = await Cart.findOne({ customer: customerId });
 
@@ -30,6 +32,10 @@ exports.addItem = async (customerId, { productId, quantity = 1, variant }) => {
   const existing = cart.items.find(
     (i) => String(i.product) === String(productId) && (i.variant || '') === (variant || '')
   );
+  // Check the resulting cart quantity, not just the increment.
+  if (product.stock < (existing ? existing.quantity : 0) + quantity) {
+    throw new AppError('Insufficient stock', 422);
+  }
   if (existing) existing.quantity += quantity;
   else cart.items.push({ product: productId, quantity, variant });
 
@@ -47,7 +53,11 @@ exports.updateItem = async (customerId, { productId, quantity, variant }) => {
   if (idx === -1) throw new AppError('Item not in cart', 404);
 
   if (quantity <= 0) cart.items.splice(idx, 1);
-  else cart.items[idx].quantity = quantity;
+  else {
+    const product = await Product.findById(productId).select('stock');
+    if (!product || product.stock < quantity) throw new AppError('Insufficient stock', 422);
+    cart.items[idx].quantity = quantity;
+  }
 
   if (cart.items.length === 0) { cart.business = undefined; cart.coupon = undefined; }
   await cart.save();

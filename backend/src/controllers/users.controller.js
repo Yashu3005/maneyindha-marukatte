@@ -38,6 +38,11 @@ exports.switchRole = async (req, res, next) => {
     }
     const user = await User.findById(req.user.id);
     if (!user) throw new AppError('User not found', 404);
+    // Only the customer <-> entrepreneur toggle is self-service. Without this guard an
+    // admin (or delivery partner) calling this endpoint would silently lose their role.
+    if (!['customer', 'entrepreneur'].includes(user.role)) {
+      throw new AppError('This account type cannot switch roles', 403);
+    }
     user.role = role;
     await user.save();
     // Tell the client whether a business already exists so returning
@@ -54,7 +59,12 @@ exports.switchRole = async (req, res, next) => {
 exports.setCredentials = async (req, res, next) => {
   try {
     const { username, password } = req.body;
-    if (!password || password.length < 6) throw new AppError('Password must be at least 6 characters', 422);
+    if (typeof password !== 'string' || password.length < 6 || password.length > 128) {
+      throw new AppError('Password must be 6-128 characters', 422);
+    }
+    if (username !== undefined && username !== null && (typeof username !== 'string' || username.length > 50)) {
+      throw new AppError('Invalid username', 422);
+    }
     const user = await User.findById(req.user.id);
     if (!user) throw new AppError('User not found', 404);
     if (username) {
@@ -68,14 +78,25 @@ exports.setCredentials = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
-// MVP storage; hash answers like passwords before production.
+// Answers are hashed (like passwords) and compared case-insensitively.
 exports.setSecurityQuestions = async (req, res, next) => {
   try {
     const { answers } = req.body;
-    if (!answers || typeof answers !== 'object') throw new AppError('answers object required', 422);
+    if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
+      throw new AppError('answers object required', 422);
+    }
+    const entries = Object.entries(answers);
+    if (!entries.length || entries.length > 10 ||
+        entries.some(([k, v]) => k.length > 100 || typeof v !== 'string' || !v.trim() || v.length > 200)) {
+      throw new AppError('answers must be 1-10 non-empty text answers', 422);
+    }
     const user = await User.findById(req.user.id);
     if (!user) throw new AppError('User not found', 404);
-    user.securityQuestions = answers;
+    const hashed = {};
+    for (const [question, answer] of entries) {
+      hashed[question] = await bcrypt.hash(answer.trim().toLowerCase(), 10);
+    }
+    user.securityQuestions = hashed;
     await user.save();
     ok(res, { saved: true });
   } catch (e) { next(e); }

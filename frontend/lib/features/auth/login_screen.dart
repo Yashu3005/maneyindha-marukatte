@@ -23,14 +23,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref.read(authProvider.notifier).login(_email.text.trim(), _password.text);
       ref.invalidate(myBusinessesProvider);
       ref.invalidate(ordersProvider);
-              ref.invalidate(sellerOrdersProvider);
       ref.invalidate(cartProvider);
       if (mounted) {
         final auth = ref.read(authProvider);
         if (auth.isAdmin) {
           context.go('/admin');
-        } else if (auth.role == 'delivery_partner') {
-          context.go('/delivery');
         } else if (auth.isEntrepreneur) {
           context.go('/seller');
         } else {

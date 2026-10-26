@@ -11,16 +11,22 @@ class TokenStore {
     refreshToken = prefs.getString('refreshToken');
   }
 
-  static Future<void> save(String? access, String? refresh) async {
-    accessToken = access;
-    refreshToken = refresh;
+  /// Saves the access token (and, when given, a new refresh token).
+  /// Passing a null access token signs out and clears both.
+  static Future<void> save(String? token, {String? refresh}) async {
+    accessToken = token;
+    final newRefresh = token == null ? null : (refresh ?? refreshToken);
+    refreshToken = newRefresh;
     final prefs = await SharedPreferences.getInstance();
-    if (access == null) {
+    if (token == null) {
       await prefs.remove('accessToken');
+    } else {
+      await prefs.setString('accessToken', token);
+    }
+    if (newRefresh == null) {
       await prefs.remove('refreshToken');
     } else {
-      await prefs.setString('accessToken', access);
-      if (refresh != null) await prefs.setString('refreshToken', refresh);
+      await prefs.setString('refreshToken', newRefresh);
     }
   }
 }
@@ -28,16 +34,34 @@ class TokenStore {
 class ApiClient {
   ApiClient._();
 
-  static final Dio dio = _build();
+  static const String _baseUrl = String.fromEnvironment('API_BASE_URL',
+      defaultValue: 'http://localhost:5050/api/v1');
 
-  static Dio _build() {
-    final dio = Dio(BaseOptions(
-      baseUrl: const String.fromEnvironment('API_BASE_URL',
-          defaultValue: 'http://localhost:5050/api/v1'),
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-    ));
-    dio.interceptors.add(InterceptorsWrapper(
+  static BaseOptions _options() => BaseOptions(
+        baseUrl: _baseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 15),
+      );
+
+  /// Access tokens last 15 minutes; trade the stored refresh token for a new
+  /// pair. Uses a bare Dio (no interceptors) so it cannot recurse.
+  static Future<bool> _refresh() async {
+    final refresh = TokenStore.refreshToken;
+    if (refresh == null) return false;
+    try {
+      final res = await Dio(_options())
+          .post('/auth/refresh', data: {'refreshToken': refresh});
+      final data = Map<String, dynamic>.from(res.data['data'] as Map);
+      await TokenStore.save(data['accessToken'] as String?,
+          refresh: data['refreshToken'] as String?);
+      return TokenStore.accessToken != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static final Dio dio = Dio(_options())
+    ..interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
         final token = TokenStore.accessToken;
         if (token != null) {
@@ -45,35 +69,24 @@ class ApiClient {
         }
         handler.next(options);
       },
-      // Access tokens expire after 15 min — silently refresh and retry
-      // instead of surfacing "Invalid or expired token" to the user.
-      onError: (e, handler) async {
-        final req = e.requestOptions;
-        final is401 = e.response?.statusCode == 401;
-        final canRetry = req.extra['retried'] != true &&
-            TokenStore.refreshToken != null &&
-            !req.path.contains('/auth/');
-        if (is401 && canRetry) {
+      onError: (err, handler) async {
+        final req = err.requestOptions;
+        final expired = err.response?.statusCode == 401 &&
+            !req.path.startsWith('/auth/') &&
+            req.extra['retried'] != true;
+        if (expired && await _refresh()) {
+          req.extra['retried'] = true;
+          req.headers['Authorization'] = 'Bearer ${TokenStore.accessToken}';
           try {
-            final fresh = await Dio(BaseOptions(baseUrl: dio.options.baseUrl))
-                .post('/auth/refresh',
-                    data: {'refreshToken': TokenStore.refreshToken});
-            final data = Map<String, dynamic>.from(fresh.data['data'] as Map);
-            await TokenStore.save(
-                data['accessToken'] as String?, data['refreshToken'] as String?);
-            req.extra['retried'] = true;
-            req.headers['Authorization'] = 'Bearer ${TokenStore.accessToken}';
-            final response = await dio.fetch(req);
-            return handler.resolve(response);
-          } catch (_) {
-            // refresh failed → fall through with the original error
+            final retry = await Dio(_options()).fetch(req);
+            return handler.resolve(retry);
+          } on DioException catch (e) {
+            return handler.next(e);
           }
         }
-        handler.next(e);
+        handler.next(err);
       },
     ));
-    return dio;
-  }
 }
 
 /// Extract the API error message from a Dio error, or a fallback.

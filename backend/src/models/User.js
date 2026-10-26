@@ -14,7 +14,6 @@ const userSchema = new mongoose.Schema(
     profileComplete: { type: Boolean, default: false },
     securityQuestions: { type: mongoose.Schema.Types.Mixed, select: false },
     bankAccount: { type: mongoose.Schema.Types.Mixed },
-    coins: { type: Number, default: 0, min: 0 },
     avatarUrl: String,
     language: { type: String, default: 'en' },
     addresses: [

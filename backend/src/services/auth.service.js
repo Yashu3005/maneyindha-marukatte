@@ -13,8 +13,8 @@ function issueTokens(user) {
 }
 
 function sanitize(user) {
-  const { _id, name, email, phone, role, avatarUrl, language, username, profileComplete, addresses, bankAccount, coins } = user;
-  return { id: _id, _id, name, email, phone, role, avatarUrl, language, username, profileComplete, addresses, bankAccount, coins: coins || 0 };
+  const { _id, name, email, phone, role, avatarUrl, language, username, profileComplete, addresses, bankAccount } = user;
+  return { id: _id, _id, name, email, phone, role, avatarUrl, language, username, profileComplete, addresses, bankAccount };
 }
 
 exports.issueTokens = issueTokens;
@@ -37,7 +37,7 @@ exports.login = async ({ email, phone, username, password }) => {
   if (!user || !(await bcrypt.compare(password, user.passwordHash || ''))) {
     throw new AppError('Invalid credentials', 401);
   }
-  if (!user.isActive) throw new AppError('Account disabled. Contact support.', 403);
+  if (user.isActive === false) throw new AppError('Account disabled', 403);
   return { user: sanitize(user), ...issueTokens(user) };
 };
 
@@ -53,40 +53,55 @@ exports.refresh = async (refreshToken) => {
   }
 };
 
-// --- OTP (demo-friendly; wire an email provider before production) ---
-const otpStore = new Map(); // email -> { otp, expires }
+// --- OTP ---
+// NOTE: no email/SMS provider is wired up yet, so real OTPs are generated but not
+// delivered. The fixed demo OTP is a development convenience ONLY: it must be opted
+// into with ALLOW_DEMO_OTP=true and is never honoured when NODE_ENV=production.
+const otpStore = new Map(); // email -> { otp, expires, attempts }
 const DEMO_OTP = '029403';
-// Demo OTP stays enabled (even on hosted deployments) until you explicitly
-// set ALLOW_DEMO_OTP=false — do that once a real email provider is wired up.
-const demoAllowed = () => process.env.ALLOW_DEMO_OTP !== 'false';
+const MAX_OTP_ATTEMPTS = 5;
+const demoOtpEnabled = () => process.env.ALLOW_DEMO_OTP === 'true' && process.env.NODE_ENV !== 'production';
+const PRIVILEGED_ROLES = ['admin', 'super_admin'];
 
 exports.sendOtp = async (email) => {
-  if (!email) throw new AppError('Email required', 422);
-  const otp = String(crypto.randomInt(100000, 999999));
-  otpStore.set(email.toLowerCase(), { otp, expires: Date.now() + 10 * 60 * 1000 });
+  if (!email || typeof email !== 'string') throw new AppError('Email required', 422);
+  const otp = String(crypto.randomInt(100000, 1000000));
+  otpStore.set(email.toLowerCase(), { otp, expires: Date.now() + 10 * 60 * 1000, attempts: 0 });
   const out = { sent: true };
-  if (demoAllowed()) out.demoOtp = DEMO_OTP;
+  if (demoOtpEnabled()) out.demoOtp = DEMO_OTP;
   return out;
 };
 
 exports.verifyOtp = async ({ email, otp }) => {
-  if (!email || !otp) throw new AppError('Email and OTP required', 422);
-  const rec = otpStore.get(email.toLowerCase());
-  const demoOk = demoAllowed() && otp === DEMO_OTP;
+  if (!email || !otp || typeof email !== 'string' || typeof otp !== 'string') {
+    throw new AppError('Email and OTP required', 422);
+  }
+  const key = email.toLowerCase();
+  const rec = otpStore.get(key);
+  if (rec && rec.attempts >= MAX_OTP_ATTEMPTS) {
+    otpStore.delete(key);
+    throw new AppError('Too many attempts, request a new OTP', 429);
+  }
+  const demoOk = demoOtpEnabled() && otp === DEMO_OTP;
   const realOk = rec && rec.expires > Date.now() && rec.otp === otp;
-  if (!demoOk && !realOk) throw new AppError('Invalid or expired OTP', 401);
-  otpStore.delete(email.toLowerCase());
+  if (!demoOk && !realOk) {
+    if (rec) rec.attempts += 1;
+    throw new AppError('Invalid or expired OTP', 401);
+  }
+  otpStore.delete(key);
 
-  let user = await User.findOne({ email: email.toLowerCase() });
+  let user = await User.findOne({ email: key });
   let isNewUser = false;
   if (!user) {
     isNewUser = true;
     user = await User.create({
-      name: 'New Member', email: email.toLowerCase(),
+      name: 'New Member', email: key,
       role: 'customer', profileComplete: false,
     });
   }
   if (!user.isActive) throw new AppError('Account disabled', 403);
+  // Email-OTP must never be a way into privileged accounts.
+  if (PRIVILEGED_ROLES.includes(user.role)) throw new AppError('Use password login for this account', 403);
   return { user: sanitize(user), ...issueTokens(user), isNewUser };
 };
 

@@ -40,15 +40,16 @@ git clone https://github.com/<you>/maneyindha-marukatte.git
 cd maneyindha-marukatte
 
 # 2. Environment
-cp .env.example .env   # fill in MongoDB, JWT secrets at minimum
+cp .env.example .env   # fill in MongoDB, JWT secrets at minimum (API reads backend/.env or this root .env)
 
 # 3. Local infrastructure
 docker compose up -d mongo redis
 
 # 4. Backend
-cd backend && npm install && npm run dev   # http://localhost:5000/health
+cd backend && npm install && npm run dev   # http://localhost:5000/health (PORT in .env)
 
-# 5. Frontend
+# 5. Frontend (the app defaults to http://localhost:5050/api/v1 — set PORT=5050 in .env,
+#    or pass --dart-define=API_BASE_URL=http://localhost:5000/api/v1)
 cd ../frontend && flutter pub get && flutter run -d chrome
 ```
 

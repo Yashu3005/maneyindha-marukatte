@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:geolocator/geolocator.dart';
-import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
-import '../../services/i18n.dart';
-import '../../services/cloudinary.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
@@ -29,18 +25,16 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
         _CustomerHome(),
         OrdersScreen(),
         CartScreen(),
-        _CommunityTab(),
         _CustomerProfile(),
       ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: t(ref, 'home')),
-          NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), selectedIcon: const Icon(Icons.receipt_long), label: t(ref, 'orders')),
-          NavigationDestination(icon: const Icon(Icons.shopping_bag_outlined), selectedIcon: const Icon(Icons.shopping_bag), label: t(ref, 'cart')),
-          NavigationDestination(icon: const Icon(Icons.diversity_3_outlined), selectedIcon: const Icon(Icons.diversity_3), label: t(ref, 'community')),
-          NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: t(ref, 'profile')),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
+          NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), selectedIcon: Icon(Icons.shopping_bag), label: 'Cart'),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );
@@ -56,43 +50,6 @@ class _CustomerHome extends ConsumerStatefulWidget {
 class _CustomerHomeState extends ConsumerState<_CustomerHome> {
   String _query = '';
   String? _category;
-  bool _nearMe = false;
-  List<Map<String, dynamic>>? _nearbyShops;
-  bool _locating = false;
-
-  Future<void> _toggleNearMe() async {
-    if (_nearMe) {
-      setState(() { _nearMe = false; _nearbyShops = null; });
-      return;
-    }
-    setState(() => _locating = true);
-    try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        throw Exception('Location permission denied');
-      }
-      final pos = await Geolocator.getCurrentPosition();
-      final res = await ApiClient.dio.get('/businesses/nearby', queryParameters: {
-        'lat': pos.latitude, 'lng': pos.longitude, 'radiusKm': 50,
-      });
-      final shops = (res.data['data'] as List)
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList();
-      setState(() { _nearMe = true; _nearbyShops = shops; });
-
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Could not get location: ${e.toString()}')));
-      }
-    } finally {
-      if (mounted) setState(() => _locating = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -112,12 +69,10 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
             Row(children: [
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${t(ref, 'namaste')}, ${auth.name.split(' ').first} 🌸', style: serif(24)),
-                  Text(t(ref, 'discover')),
+                  Text('Namaste, ${auth.name.split(' ').first} 🌸', style: serif(24)),
+                  const Text('Discover home-made treasures near you'),
                 ]),
               ),
-              _NotificationBell(),
-              const SizedBox(width: 8),
               CircleAvatar(
                 backgroundColor: MMColors.sage,
                 backgroundImage: (auth.user?['avatarUrl'] != null)
@@ -128,13 +83,13 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
             const SizedBox(height: 16),
             TextField(
               onChanged: (v) => setState(() => _query = v.toLowerCase()),
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                hintText: t(ref, 'search_hint'),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search cakes, crafts, tiffins…',
               ),
             ),
             const SizedBox(height: 16),
-            Text(t(ref, 'categories'), style: serif(18)),
+            Text('Categories', style: serif(18)),
             const SizedBox(height: 8),
             SizedBox(
               height: 110,
@@ -192,18 +147,7 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
               ),
             ),
             const SizedBox(height: 20),
-            Row(children: [
-              Expanded(child: Text(_nearMe ? t(ref, 'near_you') : t(ref, 'all_shops'), style: serif(18))),
-              FilterChip(
-                avatar: _locating
-                    ? const SizedBox(width: 14, height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.my_location, size: 16),
-                label: Text(t(ref, 'near_me')),
-                selected: _nearMe,
-                onSelected: (_) => _toggleNearMe(),
-              ),
-            ]),
+            Text('Nearby shops', style: serif(18)),
             const SizedBox(height: 8),
             SizedBox(
               height: 170,
@@ -212,18 +156,14 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                 error: (e, _) => ErrorView(
                     message: 'Could not load shops.',
                     onRetry: () => ref.invalidate(businessesProvider)),
-                data: (allShops) {
-                  final shops = _nearMe ? (_nearbyShops ?? []) : allShops;
+                data: (shops) {
                   final filtered = shops.where((b) {
                     if (_category == null) return true;
                     final c = b['category'];
                     return c is Map && c['name'] == _category;
                   }).toList();
                   if (filtered.isEmpty) {
-                    return EmptyView(
-                        message: _nearMe
-                            ? t(ref, 'coming_soon')
-                            : 'No shops in this category yet.');
+                    return const EmptyView(message: 'No shops in this category yet.');
                   }
                   return ListView.separated(
                     scrollDirection: Axis.horizontal,
@@ -235,7 +175,7 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
               ),
             ),
             const SizedBox(height: 20),
-            Text(t(ref, 'popular'), style: serif(18)),
+            Text('Popular products', style: serif(18)),
             const SizedBox(height: 8),
             products.when(
               loading: () => const LoadingView(),
@@ -362,7 +302,7 @@ class _CustomerProfile extends ConsumerWidget {
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(t(ref, 'address_book')),
+        title: const Text('Address book'),
         content: TextField(
             controller: line,
             decoration: const InputDecoration(labelText: 'Home address')),
@@ -397,57 +337,20 @@ class _CustomerProfile extends ConsumerWidget {
         const SizedBox(height: 20),
         Card(child: Column(children: [
           ListTile(
-            leading: const Icon(Icons.savings_outlined),
-            title: Text(t(ref, 'coins')),
-            trailing: Chip(label: Text('🪙 ${auth.user?['coins'] ?? 0}')),
-          ),
-          ListTile(
-            leading: const Icon(Icons.favorite_outline),
-            title: Text(t(ref, 'wishlist')),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/wishlist'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.notifications_outlined),
-            title: Text(t(ref, 'notifications')),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/notifications'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.translate),
-            title: Text(t(ref, 'language')),
-            trailing: Text(languages[ref.watch(localeProvider)] ?? 'English'),
-            onTap: () => showDialog(
-              context: context,
-              builder: (ctx) => SimpleDialog(
-                title: Text(t(ref, 'language')),
-                children: languages.entries
-                    .map((e) => SimpleDialogOption(
-                          onPressed: () {
-                            ref.read(localeProvider.notifier).set(e.key);
-                            Navigator.pop(ctx);
-                          },
-                          child: Text(e.value),
-                        ))
-                    .toList(),
-              ),
-            ),
-          ),
-          ListTile(
             leading: const Icon(Icons.badge_outlined),
-            title: Text(t(ref, 'personal')),
+            title: const Text('Personal details'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _editPersonal(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.location_on_outlined),
-            title: Text(t(ref, 'address_book')),
+            title: const Text('Address book'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _editAddress(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.storefront_outlined),
-            title: Text(t(ref, 'become_seller')),
+            title: const Text('Become an Entrepreneur'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
               final hasBusiness = await ref
@@ -455,7 +358,6 @@ class _CustomerProfile extends ConsumerWidget {
                   .switchRole('entrepreneur');
               ref.invalidate(myBusinessesProvider);
               ref.invalidate(ordersProvider);
-              ref.invalidate(sellerOrdersProvider);
               if (context.mounted) {
                 context.go(hasBusiness ? '/seller' : '/seller/onboarding/business');
               }
@@ -463,7 +365,7 @@ class _CustomerProfile extends ConsumerWidget {
           ),
           ListTile(
             leading: const Icon(Icons.support_agent_outlined),
-            title: Text(t(ref, 'help')),
+            title: const Text('Help & Support'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => showDialog(
               context: context,
@@ -475,7 +377,7 @@ class _CustomerProfile extends ConsumerWidget {
           ),
           ListTile(
             leading: const Icon(Icons.logout),
-            title: Text(t(ref, 'logout')),
+            title: const Text('Logout'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               ref.read(authProvider.notifier).logout();
@@ -484,105 +386,6 @@ class _CustomerProfile extends ConsumerWidget {
           ),
         ])),
       ]),
-    );
-  }
-}
-
-
-class _NotificationBell extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final data = ref.watch(notificationsProvider);
-    final unread = data.asData?.value['unread'] ?? 0;
-    return IconButton(
-      icon: Badge(
-        isLabelVisible: (unread as num) > 0,
-        label: Text('$unread'),
-        child: const Icon(Icons.notifications_outlined),
-      ),
-      onPressed: () async {
-        await context.push('/notifications');
-        ref.invalidate(notificationsProvider);
-      },
-    );
-  }
-}
-
-class _CommunityTab extends ConsumerWidget {
-  const _CommunityTab();
-
-  Future<void> _like(WidgetRef ref, BuildContext context, String id) async {
-    try {
-      await ApiClient.dio.post('/community/$id/like');
-      ref.invalidate(communityProvider);
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiError(e))));
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final posts = ref.watch(communityProvider);
-    return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(communityProvider),
-        child: posts.when(
-          loading: () => const LoadingView(),
-          error: (e, _) => ErrorView(
-              message: apiError(e), onRetry: () => ref.invalidate(communityProvider)),
-          data: (items) => items.isEmpty
-              ? const EmptyView(
-                  message: 'No community posts yet.\nEntrepreneurs share their stories here!')
-              : Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (_, i) {
-                        final p = items[i];
-                        final shop = (p['business'] as Map?) ?? {};
-                        final likes = (p['likes'] as List?) ?? [];
-                        return Card(
-                          clipBehavior: Clip.antiAlias,
-                          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            ListTile(
-                              leading: ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: SizedBox(width: 40, height: 40,
-                                    child: NetImage(shop['logoUrl']?.toString())),
-                              ),
-                              title: Text(shop['name']?.toString() ?? '', style: serif(15)),
-                            ),
-                            if (p['image'] != null)
-                              SizedBox(height: 260, width: double.infinity,
-                                  child: NetImage(p['image'].toString())),
-                            Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Text(p['caption']?.toString() ?? ''),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 0, 12, 8),
-                              child: Row(children: [
-                                IconButton(
-                                  icon: const Icon(Icons.favorite,
-                                      color: MMColors.marigold, size: 20),
-                                  onPressed: () => _like(ref, context, p['_id'].toString()),
-                                ),
-                                Text('${likes.length}'),
-                              ]),
-                            ),
-                          ]),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-        ),
-      ),
     );
   }
 }

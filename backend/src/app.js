@@ -10,10 +10,15 @@ const openapi = require('./docs/openapi.json');
 const { errorHandler, notFound } = require('./middleware/error');
 
 const app = express();
-app.set('trust proxy', 1); // behind Vercel/hosting proxy
+
+// Behind Vercel/Railway/Render every request arrives via a proxy; without this the
+// rate limiter would key on the proxy's IP and throttle all users together.
+// TRUST_PROXY: number of proxy hops (default 1 in production, off otherwise).
+const trustProxy = process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : '');
+if (trustProxy) app.set('trust proxy', Number.isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy));
 
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGINS?.split(',') || '*' }));
+app.use(cors({ origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()) : '*' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(mongoSanitize());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true }));

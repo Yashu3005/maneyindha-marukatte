@@ -1,25 +1,44 @@
 const Business = require('../models/Business');
-require('../models/Category'); // must be registered before populate('category')
+const Category = require('../models/Category');
 const { ok } = require('../utils/apiResponse');
 const AppError = require('../utils/AppError');
+const { parsePage, isObjectId } = require('../utils/pagination');
+const { slugify } = require('../utils/slug');
+
+// Public responses must never carry ID-proof/document URLs or reviewer internals.
+const PUBLIC_EXCLUDE = '-verification.documents -verification.reviewedBy -verification.rejectionReason';
+const ADMIN_ROLES = ['admin', 'super_admin'];
+const CREATE_FIELDS = ['name', 'description', 'category', 'logoUrl', 'bannerUrl', 'gallery', 'location',
+  'address', 'workingHours', 'gstNumber', 'yearsOfExperience'];
+
+const isOwnerOrAdmin = (user, business) =>
+  !!user && (ADMIN_ROLES.includes(user.role) || String(business.owner) === String(user.id));
 
 exports.nearby = async (req, res, next) => {
   try {
-    const { lat, lng, radiusKm = 10, page = 1, limit = 20 } = req.query;
-    if (!lat || !lng) throw new AppError('lat and lng are required', 422);
+    const { lat, lng } = req.query;
+    if (lat === undefined || lng === undefined) throw new AppError('lat and lng are required', 422);
+    const latN = Number(lat);
+    const lngN = Number(lng);
+    if (!Number.isFinite(latN) || !Number.isFinite(lngN) || Math.abs(latN) > 90 || Math.abs(lngN) > 180) {
+      throw new AppError('lat and lng must be valid coordinates', 422);
+    }
+    const radiusKm = Math.min(Math.max(Number(req.query.radiusKm) || 10, 0.1), 200);
+    const { page, limit, skip } = parsePage(req.query);
     const businesses = await Business.find({
       'verification.status': 'approved',
       isActive: true,
       location: {
         $near: {
-          $geometry: { type: 'Point', coordinates: [Number(lng), Number(lat)] },
-          $maxDistance: Number(radiusKm) * 1000,
+          $geometry: { type: 'Point', coordinates: [lngN, latN] },
+          $maxDistance: radiusKm * 1000,
         },
       },
     })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
-    ok(res, businesses, { page: Number(page), limit: Number(limit) });
+      .select(PUBLIC_EXCLUDE)
+      .skip(skip)
+      .limit(limit);
+    ok(res, businesses, { page, limit });
   } catch (e) { next(e); }
 };
 
@@ -27,25 +46,39 @@ exports.getById = async (req, res, next) => {
   try {
     const business = await Business.findById(req.params.id).populate('category');
     if (!business || !business.isActive) throw new AppError('Business not found', 404);
-    ok(res, business);
+    const privileged = isOwnerOrAdmin(req.user, business);
+    // Unapproved shops are only visible to their owner and admins.
+    if (business.verification?.status !== 'approved' && !privileged) throw new AppError('Business not found', 404);
+    if (privileged) return ok(res, business);
+    const out = business.toObject();
+    if (out.verification) {
+      delete out.verification.documents;
+      delete out.verification.reviewedBy;
+      delete out.verification.rejectionReason;
+    }
+    ok(res, out);
   } catch (e) { next(e); }
 };
 
 exports.create = async (req, res, next) => {
   try {
-    const body = { ...req.body, owner: req.user.id };
+    // Whitelist: never spread req.body (it would allow self-approval via
+    // verification.status, choosing owner/rating, etc.).
+    const body = {};
+    for (const key of CREATE_FIELDS) if (req.body[key] !== undefined) body[key] = req.body[key];
+    body.owner = req.user.id;
+
     // Onboarding sends a category NAME; resolve/create the Category doc.
-    if (body.category && !/^[0-9a-fA-F]{24}$/.test(String(body.category))) {
-      const Category = require('../models/Category');
-      const name = String(body.category);
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    if (body.category && !isObjectId(String(body.category))) {
+      const name = String(body.category).trim();
+      const slug = slugify(name);
       const cat = await Category.findOneAndUpdate(
-        { slug }, { name, slug, isActive: true }, { upsert: true, new: true });
+        { slug }, { $setOnInsert: { name, slug, isActive: true } }, { upsert: true, new: true });
       body.category = cat._id;
     }
     // Default location (refined in the Maps phase) so geo index stays valid.
     if (!body.location) body.location = { type: 'Point', coordinates: [77.5946, 12.9716] };
-    body.slug = body.slug || `${String(body.name || 'shop').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`;
+    body.slug = `${slugify(body.name || 'shop')}-${Date.now().toString(36)}`;
     const business = await Business.create(body);
     ok(res, business, undefined, 201);
   } catch (e) { next(e); }
@@ -60,20 +93,20 @@ exports.uploadDocs = async (req, res, next) => {
 
 exports.list = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20 } = req.query;
+    const { page, limit, skip } = parsePage(req.query);
     const filter = { 'verification.status': 'approved', isActive: true };
     const [items, total] = await Promise.all([
-      require('../models/Business').find(filter).sort('-rating.avg')
-        .skip((page - 1) * limit).limit(Number(limit)).populate('category', 'name'),
-      require('../models/Business').countDocuments(filter),
+      Business.find(filter).select(PUBLIC_EXCLUDE).sort('-rating.avg')
+        .skip(skip).limit(limit).populate('category', 'name'),
+      Business.countDocuments(filter),
     ]);
-    ok(res, items, { page: Number(page), limit: Number(limit), total });
+    ok(res, items, { page, limit, total });
   } catch (e) { next(e); }
 };
 
 exports.mine = async (req, res, next) => {
   try {
-    const items = await require('../models/Business')
+    const items = await Business
       .find({ owner: req.user.id, isActive: true })
       .populate('category', 'name');
     ok(res, items);
