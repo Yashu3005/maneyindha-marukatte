@@ -62,6 +62,11 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+orderSchema.index({ customer: 1, createdAt: -1 });
+orderSchema.index({ business: 1, createdAt: -1 });
+orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ 'items.product': 1, customer: 1, status: 1 });
+
 module.exports = mongoose.model('Order', orderSchema);
 module.exports.STATUSES = STATUSES;
 module.exports.VALID_TRANSITIONS = VALID_TRANSITIONS;

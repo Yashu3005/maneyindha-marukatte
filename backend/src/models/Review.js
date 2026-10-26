@@ -19,5 +19,7 @@ const reviewSchema = new mongoose.Schema(
 
 // One review per customer per product per order
 reviewSchema.index({ customer: 1, product: 1, order: 1 }, { unique: true, sparse: true });
+reviewSchema.index({ product: 1, deletedAt: 1, createdAt: -1 });
+reviewSchema.index({ business: 1, deletedAt: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Review', reviewSchema);
