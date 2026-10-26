@@ -37,6 +37,8 @@ class ApiClient {
   static const String _baseUrl = String.fromEnvironment('API_BASE_URL',
       defaultValue: 'http://localhost:5050/api/v1');
 
+  static String get baseUrl => _baseUrl;
+
   static BaseOptions _options() => BaseOptions(
         baseUrl: _baseUrl,
         connectTimeout: const Duration(seconds: 10),

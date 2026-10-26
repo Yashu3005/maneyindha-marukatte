@@ -2,7 +2,8 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const AppError = require('../utils/AppError');
 const { ok } = require('../utils/apiResponse');
-const { issueTokens, sanitize } = require('../services/auth.service');
+const { issueSession, sanitize } = require('../services/auth.service');
+const avatarService = require('../services/avatar.service');
 
 exports.me = async (req, res, next) => {
   try {
@@ -14,7 +15,8 @@ exports.me = async (req, res, next) => {
 
 exports.updateMe = async (req, res, next) => {
   try {
-    const allowed = ['name', 'phone', 'avatarUrl', 'language', 'addresses', 'bankAccount'];
+    // avatarUrl is deliberately NOT editable here: it is only ever set by the validated upload endpoint.
+    const allowed = ['name', 'phone', 'language', 'addresses', 'bankAccount'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -26,6 +28,16 @@ exports.updateMe = async (req, res, next) => {
     await user.save();
     ok(res, sanitize(user));
   } catch (e) { next(e); }
+};
+
+exports.uploadAvatar = async (req, res, next) => {
+  try { ok(res, sanitize(await avatarService.setAvatar(req.user.id, req.file))); }
+  catch (e) { next(e); }
+};
+
+exports.deleteAvatar = async (req, res, next) => {
+  try { ok(res, sanitize(await avatarService.removeAvatar(req.user.id))); }
+  catch (e) { next(e); }
 };
 
 // Easy role switch: customer <-> entrepreneur (spec: changeable from profile).
@@ -51,7 +63,7 @@ exports.switchRole = async (req, res, next) => {
     const hasBusiness = role === 'entrepreneur'
       ? !!(await Business.exists({ owner: user._id, isActive: true }))
       : false;
-    ok(res, { user: sanitize(user), ...issueTokens(user), hasBusiness });
+    ok(res, { user: sanitize(user), ...(await issueSession(user, req.user.sid)), hasBusiness });
   } catch (e) { next(e); }
 };
 

@@ -1,5 +1,12 @@
 const mongoose = require('mongoose');
 
+const { isValidLatLng, coarsen } = require('../utils/geo');
+
+const coordValidator = {
+  validator: (v) => v == null || (v.length === 2 && isValidLatLng(v[1], v[0])),
+  message: 'coordinates must be a real [lng, lat] pair',
+};
+
 const businessSchema = new mongoose.Schema(
   {
     owner: { type: mongoose.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -10,10 +17,17 @@ const businessSchema = new mongoose.Schema(
     logoUrl: String,
     bannerUrl: String,
     gallery: [String],
+    // Exact point — visible to the owner and admins only. Absent until the owner sets it (never a made-up default).
     location: {
-      type: { type: String, enum: ['Point'], default: 'Point' },
-      coordinates: { type: [Number], required: true }, // [lng, lat]
+      type: { type: String, enum: ['Point'] },
+      coordinates: { type: [Number], default: undefined, validate: coordValidator }, // [lng, lat]
     },
+    // Coarsened copy (≈110 m) used for public discovery; derived from `location`, never client-supplied.
+    publicLocation: {
+      type: { type: String, enum: ['Point'] },
+      coordinates: { type: [Number], default: undefined, validate: coordValidator },
+    },
+    locationSource: { type: String, enum: ['device', 'manual', 'unset'], default: 'unset' },
     address: { line1: String, city: String, state: String, pincode: String },
     workingHours: [{ day: Number, open: String, close: String, closed: Boolean }],
     gstNumber: String,
@@ -34,7 +48,17 @@ const businessSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-businessSchema.index({ location: '2dsphere' });
+// Keep the public point in step with the exact one, whichever way the document is saved.
+businessSchema.pre('validate', function syncPublicLocation(next) {
+  const c = this.location?.coordinates;
+  if (c?.length === 2) {
+    this.location.type = 'Point';
+    this.publicLocation = { type: 'Point', coordinates: coarsen(c) };
+  }
+  next();
+});
+
+businessSchema.index({ publicLocation: '2dsphere' }); // discovery runs on the coarsened point only
 businessSchema.index({ name: 'text', description: 'text' });
 
 module.exports = mongoose.model('Business', businessSchema);

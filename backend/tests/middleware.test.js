@@ -3,7 +3,7 @@ const request = require('supertest');
 const { tokenFor } = require('./helpers');
 const { errorHandler } = require('../src/middleware/error');
 const { requireAuth, optionalAuth } = require('../src/middleware/auth');
-const { assertEnv } = require('../src/config/env');
+const { assertEnv, emailConfigIssues } = require('../src/config/env');
 const { parsePage } = require('../src/utils/pagination');
 const { slugify } = require('../src/utils/slug');
 
@@ -54,15 +54,32 @@ describe('optionalAuth', () => {
 
 describe('assertEnv', () => {
   const good = { MONGODB_URI: 'mongodb://x', JWT_SECRET: 'a'.repeat(40), JWT_REFRESH_SECRET: 'b'.repeat(40) };
+  const prod = { ...good, NODE_ENV: 'production', RESEND_API_KEY: 're_abcdefghijklmnop', RESEND_FROM_EMAIL: 'MM <login@mail.example.org>' };
   test('passes with required vars', () => expect(() => assertEnv(good)).not.toThrow());
   test('names every missing var', () => {
     expect(() => assertEnv({})).toThrow(/MONGODB_URI, JWT_SECRET, JWT_REFRESH_SECRET/);
   });
   test('production rejects placeholder / short / identical secrets', () => {
-    expect(() => assertEnv({ ...good, NODE_ENV: 'production', JWT_SECRET: 'replace-with-long-random-string-xxxxxxxxxxxxx' })).toThrow(/Weak/);
-    expect(() => assertEnv({ ...good, NODE_ENV: 'production', JWT_SECRET: 'short' })).toThrow(/Weak/);
-    expect(() => assertEnv({ ...good, NODE_ENV: 'production', JWT_REFRESH_SECRET: good.JWT_SECRET })).toThrow(/differ/);
-    expect(() => assertEnv({ ...good, NODE_ENV: 'production' })).not.toThrow();
+    expect(() => assertEnv({ ...prod, JWT_SECRET: 'replace-with-long-random-string-xxxxxxxxxxxxx' })).toThrow(/Weak/);
+    expect(() => assertEnv({ ...prod, JWT_SECRET: 'short' })).toThrow(/Weak/);
+    expect(() => assertEnv({ ...prod, JWT_REFRESH_SECRET: good.JWT_SECRET })).toThrow(/differ/);
+    expect(() => assertEnv(prod)).not.toThrow();
+  });
+  test('production requires a working Resend configuration', () => {
+    expect(() => assertEnv({ ...prod, RESEND_API_KEY: '' })).toThrow(/RESEND_API_KEY is not set/);
+    expect(() => assertEnv({ ...prod, RESEND_FROM_EMAIL: '' })).toThrow(/RESEND_FROM_EMAIL is not set/);
+    expect(() => assertEnv({ ...prod, RESEND_API_KEY: 'sk-nope' })).toThrow(/does not look like a Resend key/);
+  });
+  test('a consumer-mailbox sender (gmail etc.) is rejected with an actionable message', () => {
+    const issues = emailConfigIssues({ ...prod, RESEND_FROM_EMAIL: 'Maneyindha Marukatte <someone@gmail.com>' });
+    expect(issues.join()).toMatch(/gmail\.com.*cannot send from/);
+    expect(emailConfigIssues({ ...prod, RESEND_FROM_EMAIL: 'plain@mail.example.org' })).toEqual([]);
+    expect(emailConfigIssues({ ...prod, RESEND_FROM_EMAIL: 'not an address' }).join()).toMatch(/not a valid address/);
+    expect(emailConfigIssues({})).toHaveLength(2);
+  });
+  test('config problems never echo the secret values', () => {
+    const msg = emailConfigIssues({ RESEND_API_KEY: 'bad-secret-value', RESEND_FROM_EMAIL: 'x@gmail.com' }).join();
+    expect(msg).not.toContain('bad-secret-value');
   });
   test('short secrets are fine outside production (tests/dev)', () => {
     expect(() => assertEnv({ ...good, JWT_SECRET: 'x', JWT_REFRESH_SECRET: 'y' })).not.toThrow();

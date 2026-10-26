@@ -46,7 +46,7 @@ describe('platform basics', () => {
 
 describe('authentication required (401)', () => {
   const protectedRoutes = [
-    ['get', '/users/me'], ['patch', '/users/me'], ['post', '/users/me/role'],
+    ['post', '/auth/logout-all'], ['get', '/users/me'], ['patch', '/users/me'], ['post', '/users/me/role'],
     ['post', '/users/me/credentials'], ['post', '/users/me/security-questions'],
     ['get', '/cart'], ['post', '/cart/items'], ['patch', '/cart/items'], ['delete', '/cart'], ['post', '/cart/coupon'],
     ['get', '/orders/mine'], ['post', '/orders'], ['patch', `/orders/${oid()}/status`],
@@ -143,19 +143,11 @@ describe('input validation (422) happens before any DB access', () => {
     const res = await request(app).post(`${api}/auth/refresh`).send({ refreshToken: tokenFor('customer') });
     expect(res.status).toBe(401);
   });
-  test('otp/send requires email; otp/verify rejects a wrong code without touching the DB', async () => {
+  test('otp/send and otp/verify validate input before touching Resend or the DB', async () => {
     expect((await request(app).post(`${api}/auth/otp/send`).send({})).status).toBe(422);
-    const sent = await request(app).post(`${api}/auth/otp/send`).send({ email: 'otp-http@example.com' });
-    expect(sent.status).toBe(200);
-    expect(sent.body.data.sent).toBe(true);
-    expect(sent.body.data.demoOtp).toBeUndefined(); // demo OTP is opt-in only
-    const bad = await request(app).post(`${api}/auth/otp/verify`).send({ email: 'otp-http@example.com', otp: '000000' });
-    expect(bad.status).toBe(401);
-    expect(bad.body.error.message).toBe('Invalid or expired OTP');
-  });
-  test('the old hard-coded demo OTP no longer works by default', async () => {
-    const res = await request(app).post(`${api}/auth/otp/verify`).send({ email: 'admin@mm.dev', otp: '029403' });
-    expect(res.status).toBe(401);
+    expect((await request(app).post(`${api}/auth/otp/send`).send({ email: 'nope' })).status).toBe(422);
+    expect((await request(app).post(`${api}/auth/otp/verify`).send({ email: 'a@b.co' })).status).toBe(422);
+    expect((await request(app).post(`${api}/auth/otp/verify`).send({ email: 'a@b.co', otp: '12' })).status).toBe(422);
   });
   test('firebase-exchange requires idToken', async () => {
     expect((await request(app).post(`${api}/auth/firebase-exchange`).send({})).status).toBe(422);

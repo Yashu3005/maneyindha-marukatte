@@ -12,6 +12,16 @@ final businessesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asyn
   return _asList(res.data['data']);
 });
 
+/// Shops near a point the user shared. Key is "lat,lng" so the provider can be cached per position.
+final nearbyBusinessesProvider =
+    FutureProvider.family<List<Map<String, dynamic>>, String>((ref, key) async {
+  final parts = key.split(',');
+  final res = await ApiClient.dio.get('/businesses/nearby', queryParameters: {
+    'lat': parts[0], 'lng': parts[1], 'radiusKm': 25,
+  });
+  return _asList(res.data['data']);
+});
+
 final businessProvider =
     FutureProvider.family<Map<String, dynamic>, String>((ref, id) async {
   final res = await ApiClient.dio.get('/businesses/$id');
@@ -70,3 +80,13 @@ final businessReviewsProvider =
 /// Scratch state carried through the seller onboarding steps.
 final sellerOnboardingProvider =
     StateProvider<Map<String, dynamic>>((ref) => {});
+
+/// Where to download the app, as configured on the server. `configured == false` means: show nothing.
+final appDownloadProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  try {
+    final res = await ApiClient.dio.get('/app/download');
+    return Map<String, dynamic>.from(res.data['data'] as Map);
+  } catch (_) {
+    return {'configured': false};
+  }
+});

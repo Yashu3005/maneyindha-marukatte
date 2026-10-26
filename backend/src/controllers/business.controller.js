@@ -4,9 +4,25 @@ const { ok } = require('../utils/apiResponse');
 const AppError = require('../utils/AppError');
 const { parsePage, isObjectId } = require('../utils/pagination');
 const { slugify } = require('../utils/slug');
+const { haversineKm } = require('../utils/geo');
 
 // Public responses must never carry ID-proof/document URLs or reviewer internals.
-const PUBLIC_EXCLUDE = '-verification.documents -verification.reviewedBy -verification.rejectionReason';
+const PUBLIC_EXCLUDE = '-verification.documents -verification.reviewedBy -verification.rejectionReason -location';
+
+// Public shape: the exact point is replaced by the coarsened one (same field name, so clients are unaffected),
+// and `locationSource` stays internal. Optionally adds the distance from a visitor-supplied point.
+function toPublic(doc, from) {
+  const out = typeof doc?.toObject === 'function' ? doc.toObject() : { ...doc };
+  const pub = out.publicLocation;
+  delete out.location;
+  delete out.publicLocation;
+  delete out.locationSource;
+  if (pub?.coordinates?.length === 2) {
+    out.location = pub;
+    if (from) out.distanceKm = Math.round(haversineKm(from.lat, from.lng, pub.coordinates[1], pub.coordinates[0]) * 10) / 10;
+  }
+  return out;
+}
 const ADMIN_ROLES = ['admin', 'super_admin'];
 const CREATE_FIELDS = ['name', 'description', 'category', 'logoUrl', 'bannerUrl', 'gallery', 'location',
   'address', 'workingHours', 'gstNumber', 'yearsOfExperience'];
@@ -28,7 +44,7 @@ exports.nearby = async (req, res, next) => {
     const businesses = await Business.find({
       'verification.status': 'approved',
       isActive: true,
-      location: {
+      publicLocation: {
         $near: {
           $geometry: { type: 'Point', coordinates: [lngN, latN] },
           $maxDistance: radiusKm * 1000,
@@ -38,7 +54,7 @@ exports.nearby = async (req, res, next) => {
       .select(PUBLIC_EXCLUDE)
       .skip(skip)
       .limit(limit);
-    ok(res, businesses, { page, limit });
+    ok(res, businesses.map((b) => toPublic(b, { lat: latN, lng: lngN })), { page, limit });
   } catch (e) { next(e); }
 };
 
@@ -50,7 +66,7 @@ exports.getById = async (req, res, next) => {
     // Unapproved shops are only visible to their owner and admins.
     if (business.verification?.status !== 'approved' && !privileged) throw new AppError('Business not found', 404);
     if (privileged) return ok(res, business);
-    const out = business.toObject();
+    const out = toPublic(business);
     if (out.verification) {
       delete out.verification.documents;
       delete out.verification.reviewedBy;
@@ -76,11 +92,22 @@ exports.create = async (req, res, next) => {
         { slug }, { $setOnInsert: { name, slug, isActive: true } }, { upsert: true, new: true });
       body.category = cat._id;
     }
-    // Default location (refined in the Maps phase) so geo index stays valid.
-    if (!body.location) body.location = { type: 'Point', coordinates: [77.5946, 12.9716] };
+    // No made-up default location: a shop without one simply does not appear in "near me" until the owner sets it.
+    body.locationSource = body.location ? (req.body.locationSource || 'manual') : 'unset';
     body.slug = `${slugify(body.name || 'shop')}-${Date.now().toString(36)}`;
     const business = await Business.create(body);
     ok(res, business, undefined, 201);
+  } catch (e) { next(e); }
+};
+
+exports.setLocation = async (req, res, next) => {
+  try {
+    const business = await Business.findOne({ _id: req.params.id, owner: req.user.id, isActive: true });
+    if (!business) throw new AppError('Business not found', 404); // other people's shops look the same as missing ones
+    business.location = { type: 'Point', coordinates: [req.body.lng, req.body.lat] };
+    business.locationSource = req.body.source;
+    await business.save(); // pre-validate hook derives publicLocation
+    ok(res, business);
   } catch (e) { next(e); }
 };
 
@@ -100,7 +127,7 @@ exports.list = async (req, res, next) => {
         .skip(skip).limit(limit).populate('category', 'name'),
       Business.countDocuments(filter),
     ]);
-    ok(res, items, { page, limit, total });
+    ok(res, items.map((b) => toPublic(b)), { page, limit, total });
   } catch (e) { next(e); }
 };
 

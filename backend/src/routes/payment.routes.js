@@ -1,27 +1,15 @@
 const router = require('express').Router();
-const Joi = require('joi');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const rateLimit = require('express-rate-limit');
+const { requireAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const paymentService = require('../services/payment.service');
-const { ok } = require('../utils/apiResponse');
+const { createRazorpayOrderSchema, verifyPaymentSchema } = require('../validators/payment.validator');
+const ctrl = require('../controllers/payment.controller');
 
-router.use(requireAuth, requireRole('customer', 'entrepreneur'));
+// The webhook route is mounted in app.js (it needs the raw body, before express.json).
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, standardHeaders: true });
 
-router.post('/link',
-  validate(Joi.object({
-    orderId: Joi.string().hex().length(24).required(),
-    returnUrl: Joi.string().uri(),
-  })),
-  async (req, res, next) => {
-    try { ok(res, await paymentService.createPaymentLink(req.user.id, req.body.orderId, req.body.returnUrl)); }
-    catch (e) { next(e); }
-  });
-
-router.post('/verify',
-  validate(Joi.object({ orderId: Joi.string().hex().length(24).required() })),
-  async (req, res, next) => {
-    try { ok(res, await paymentService.verifyPayment(req.user.id, req.body.orderId)); }
-    catch (e) { next(e); }
-  });
+router.post('/razorpay/order', requireAuth, limiter, validate(createRazorpayOrderSchema), ctrl.createOrder);
+router.post('/razorpay/verify', requireAuth, limiter, validate(verifyPaymentSchema), ctrl.verify);
+router.get('/status/:orderId', requireAuth, ctrl.status);
 
 module.exports = router;

@@ -16,6 +16,12 @@ exports.firebaseExchange = async (req, res, next) => {
 exports.sendOtp = async (req, res, next) => {
   try { ok(res, await authService.sendOtp(req.body.email)); } catch (e) { next(e); }
 };
+exports.logout = async (req, res, next) => {
+  try { ok(res, await authService.logout(req.body.refreshToken)); } catch (e) { next(e); }
+};
+exports.logoutAll = async (req, res, next) => {
+  try { ok(res, await authService.logoutAll(req.user.id)); } catch (e) { next(e); }
+};
 exports.verifyOtp = async (req, res, next) => {
   try { ok(res, await authService.verifyOtp(req.body)); } catch (e) { next(e); }
 };

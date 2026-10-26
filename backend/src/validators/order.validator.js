@@ -1,6 +1,8 @@
 const Joi = require('joi');
 const { STATUSES } = require('../models/Order');
 
+const geo = require('./geo.validator');
+
 const objectId = Joi.string().hex().length(24);
 
 exports.createOrderSchema = Joi.object({
@@ -14,13 +16,11 @@ exports.createOrderSchema = Joi.object({
     line1: Joi.string().trim().min(1).max(200).required(),
     city: Joi.string().trim().max(100).allow(''),
     pincode: Joi.string().trim().max(10).allow(''),
-    location: Joi.object({
-      type: Joi.string().valid('Point'),
-      coordinates: Joi.array().items(Joi.number()).length(2),
-    }),
+    location: geo.point,
   }).when('isSelfPickup', { is: true, then: Joi.optional(), otherwise: Joi.required() }),
   couponCode: Joi.string().trim().max(30),
   notes: Joi.string().max(500).allow(''),
+  paymentMethod: Joi.string().valid('cod', 'razorpay').default('cod'),
 });
 
 exports.updateStatusSchema = Joi.object({

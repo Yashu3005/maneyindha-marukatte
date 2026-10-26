@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Maneyindha Marukatte API",
-    "version": "0.3.0",
-    "description": "Localized marketplace for home-based women entrepreneurs."
+    "version": "0.4.0",
+    "description": "Localized marketplace for home-based women entrepreneurs. All responses use the envelope `{success, data, meta?}` or `{success:false, error:{message, code?, retryAfterSeconds?}}`. Money amounts in orders are rupees; Razorpay amounts are paise. Secrets are never returned by any endpoint."
   },
   "servers": [
     {
@@ -15,7 +15,8 @@
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
-        "bearerFormat": "JWT"
+        "bearerFormat": "JWT",
+        "description": "Short-lived access JWT (15 min). Obtain via POST /auth/otp/verify; renew with POST /auth/refresh."
       }
     },
     "schemas": {
@@ -39,6 +40,108 @@
                 "type": "string"
               }
             }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "retryAfterSeconds": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "GeoPoint": {
+        "type": "object",
+        "description": "GeoJSON point, [longitude, latitude]. (0,0) is rejected.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "Point"
+            ]
+          },
+          "coordinates": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "RazorpayCheckout": {
+        "type": "object",
+        "description": "Everything the browser needs to open Razorpay Checkout. Contains the PUBLIC key id only.",
+        "properties": {
+          "keyId": {
+            "type": "string"
+          },
+          "razorpayOrderId": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer",
+            "description": "paise, computed by the server"
+          },
+          "currency": {
+            "type": "string",
+            "example": "INR"
+          },
+          "orderId": {
+            "type": "string"
+          },
+          "orderNumber": {
+            "type": "string"
+          },
+          "prefill": {
+            "type": "object"
+          }
+        }
+      },
+      "PaymentStatus": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string"
+          },
+          "orderStatus": {
+            "type": "string"
+          },
+          "paymentStatus": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "paid",
+              "failed",
+              "refunded"
+            ]
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": [
+              "cod",
+              "razorpay"
+            ]
+          },
+          "note": {
+            "type": "string"
           }
         }
       }
@@ -230,7 +333,8 @@
           "200": {
             "description": "Business list"
           }
-        }
+        },
+        "description": "Searches the coarsened public point. Each result carries `distanceKm` (0.1 km resolution, from the coarse point). Shops that have not shared a location are not returned here (they still appear in GET /businesses)."
       }
     },
     "/businesses/{id}": {
@@ -276,6 +380,34 @@
           },
           "403": {
             "description": "Forbidden"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "List approved shops (coarsened public location)",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Shops"
           }
         }
       }
@@ -376,6 +508,38 @@
             "description": "Not found"
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Remove one of your products (entrepreneur, owner only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed"
+          },
+          "403": {
+            "description": "Not allowed"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
       }
     },
     "/orders": {
@@ -419,13 +583,36 @@
                     }
                   },
                   "deliveryAddress": {
-                    "type": "object"
+                    "type": "object",
+                    "properties": {
+                      "line1": {
+                        "type": "string"
+                      },
+                      "city": {
+                        "type": "string"
+                      },
+                      "pincode": {
+                        "type": "string"
+                      },
+                      "location": {
+                        "$ref": "#/components/schemas/GeoPoint"
+                      }
+                    }
                   },
                   "isSelfPickup": {
                     "type": "boolean"
                   },
                   "notes": {
                     "type": "string"
+                  },
+                  "paymentMethod": {
+                    "type": "string",
+                    "enum": [
+                      "cod",
+                      "razorpay"
+                    ],
+                    "default": "cod",
+                    "description": "razorpay: order is created unpaid; call POST /payments/razorpay/order next. The shop cannot confirm it until payment is confirmed by the server."
                   }
                 }
               }
@@ -438,6 +625,26 @@
           },
           "422": {
             "description": "Stock/validation error"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -818,6 +1025,1121 @@
           },
           "422": {
             "description": "Already reviewed / missing reason"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Liveness probe (served at /health, outside /api/v1)",
+        "responses": {
+          "200": {
+            "description": "{status:\"ok\"}"
+          }
+        }
+      }
+    },
+    "/auth/otp/send": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Email a one-time sign-in code (Resend)",
+        "responses": {
+          "200": {
+            "description": "Code sent"
+          },
+          "429": {
+            "description": "Cooldown or rate limit. See Retry-After header / error.retryAfterSeconds"
+          },
+          "502": {
+            "description": "Email provider rejected or failed (code: EMAIL_SEND_FAILED)"
+          },
+          "503": {
+            "description": "Email not configured"
+          }
+        },
+        "description": "Generates a 6-digit code (CSPRNG), stores only a keyed hash, and emails it. 5-minute expiry; 60-second resend cooldown; a new code invalidates older ones; per-IP and per-email limits. The code is NEVER returned in the response.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                },
+                "required": [
+                  "email"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/otp/verify": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Verify the emailed code and sign in",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Wrong/expired/used code (generic message)"
+          },
+          "429": {
+            "description": "Too many attempts"
+          }
+        },
+        "description": "Single use. 5 wrong attempts burn the code. Creates the account on first successful verification. Returns access + refresh tokens bound to a revocable session.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "otp": {
+                    "type": "string",
+                    "pattern": "^[0-9]{6}$"
+                  }
+                },
+                "required": [
+                  "email",
+                  "otp"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Revoke the session for a refresh token",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "Idempotent. Access tokens already issued remain valid until they expire (≤15 min).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refreshToken": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout-all": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Revoke every session of the signed-in user",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/users/me": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Current user",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update own profile",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "avatarUrl cannot be set here; use POST /users/me/avatar. Address coordinates are optional (manual entry) and validated when present.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "language": {
+                    "type": "string"
+                  },
+                  "addresses": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string"
+                        },
+                        "line1": {
+                          "type": "string"
+                        },
+                        "city": {
+                          "type": "string"
+                        },
+                        "pincode": {
+                          "type": "string"
+                        },
+                        "location": {
+                          "$ref": "#/components/schemas/GeoPoint"
+                        }
+                      }
+                    }
+                  },
+                  "bankAccount": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/me/avatar": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Upload profile photo (entrepreneurs; optional)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "multipart/form-data, field `avatar`. JPEG/PNG/WebP decided by file content (not the declared type), ≤ 2 MB, 20 uploads/hour. Stored on Cloudinary; one stable object per user.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "avatar"
+                ],
+                "properties": {
+                  "avatar": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated user"
+          },
+          "413": {
+            "description": "Larger than 2 MB"
+          },
+          "415": {
+            "description": "Not JPEG/PNG/WebP"
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage not configured (UPLOAD_NOT_CONFIGURED)"
+          },
+          "502": {
+            "description": "Upload failed"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Remove profile photo (back to the default avatar)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/users/me/role": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Switch customer <-> entrepreneur; returns fresh tokens",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "customer",
+                      "entrepreneur"
+                    ]
+                  }
+                },
+                "required": [
+                  "role"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/me/credentials": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Set username/password",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6
+                  }
+                },
+                "required": [
+                  "password"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/me/security-questions": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Set security question answers (stored hashed)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "answers": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "answers"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/razorpay/order": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Create (or reuse) the Razorpay order for one of your own pending orders",
+        "responses": {
+          "201": {
+            "description": "Checkout parameters"
+          },
+          "404": {
+            "description": "Not your order"
+          },
+          "409": {
+            "description": "Already paid"
+          },
+          "422": {
+            "description": "Not an online-payment order / no longer payable"
+          },
+          "502": {
+            "description": "Razorpay error"
+          },
+          "503": {
+            "description": "Payments not configured"
+          }
+        },
+        "description": "Amount is computed from the stored order total (rupees × 100 → paise); any amount in the request is ignored. Idempotent: repeating returns the same Razorpay order. Test/sandbox keys only until you go live.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "orderId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "orderId"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/razorpay/verify": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Verify the Checkout success callback",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "400": {
+            "description": "Invalid signature / mismatch"
+          },
+          "404": {
+            "description": "Not your order"
+          }
+        },
+        "description": "Recomputes HMAC-SHA256(razorpay_order_id|razorpay_payment_id) with the key secret using the order id stored server-side, compares in constant time, then fetches the payment from Razorpay and checks status=captured, order id, amount and currency before marking the order paid. The browser callback alone never marks anything paid.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "orderId": {
+                    "type": "string"
+                  },
+                  "razorpay_order_id": {
+                    "type": "string"
+                  },
+                  "razorpay_payment_id": {
+                    "type": "string"
+                  },
+                  "razorpay_signature": {
+                    "type": "string",
+                    "minLength": 64,
+                    "maxLength": 64
+                  }
+                },
+                "required": [
+                  "orderId",
+                  "razorpay_order_id",
+                  "razorpay_payment_id",
+                  "razorpay_signature"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/payments/status/{orderId}": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Backend payment status for one of your orders (the UI shows this, nothing else)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not your order"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "MongoDB ObjectId"
+          }
+        ]
+      }
+    },
+    "/payments/razorpay/webhook": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Razorpay webhook (server-to-server)",
+        "security": [],
+        "description": "Not for browsers. Authenticated by the X-Razorpay-Signature header = HMAC-SHA256(raw body, RAZORPAY_WEBHOOK_SECRET); the body is read raw before JSON parsing. Deduplicated on X-Razorpay-Event-Id. Handles payment.captured, order.paid, payment.failed; other events are acknowledged and ignored. Amount and currency are re-checked against the order.",
+        "parameters": [
+          {
+            "name": "X-Razorpay-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Razorpay-Event-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Processed, duplicate or ignored"
+          },
+          "400": {
+            "description": "Bad signature / body"
+          },
+          "503": {
+            "description": "Webhook secret not configured"
+          }
+        }
+      }
+    },
+    "/ai/product-description": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "summary": "Draft a product description (entrepreneurs)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "502": {
+            "description": "Provider failed or returned unusable output (AI_PROVIDER_ERROR / AI_BAD_OUTPUT)"
+          },
+          "503": {
+            "description": "AI not configured or busy"
+          },
+          "504": {
+            "description": "Provider timeout"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Provider-backed (AI_PROVIDER=gemini|openai). Only the product name/category/details are sent to the provider. Output is schema-validated (20–600 chars) and sanitised; a draft for the seller to review. 30 requests/hour/user.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 120
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "details": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "English",
+                      "Kannada",
+                      "Hindi"
+                    ]
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/app/download": {
+      "get": {
+        "tags": [
+          "App"
+        ],
+        "summary": "Where the app can be opened/downloaded, as configured by the operator",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "description": "Returns {configured:false} when no valid public https destination is configured. Store links are reported \"as configured\"; the server does not check that a listing exists."
+      }
+    },
+    "/app/download-qr.png": {
+      "get": {
+        "tags": [
+          "App"
+        ],
+        "summary": "QR code (PNG) for the configured destination",
+        "responses": {
+          "200": {
+            "description": "image/png",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not configured (DOWNLOAD_NOT_CONFIGURED)"
+          }
+        }
+      }
+    },
+    "/businesses/{id}/location": {
+      "patch": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Set the shop's exact location (owner only)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not your shop"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Exact point is visible to the owner/admins only; public responses carry a coarsened (~110 m) point and a distance computed from it.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "device",
+                      "manual"
+                    ]
+                  }
+                },
+                "required": [
+                  "lat",
+                  "lng",
+                  "source"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "MongoDB ObjectId"
+          }
+        ]
+      }
+    },
+    "/businesses/mine": {
+      "get": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Shops owned by the signed-in entrepreneur (exact location included)",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "Missing/invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/images": {
+      "get": {
+        "tags": [
+          "Media"
+        ],
+        "summary": "Stock photo suggestions (Pexels when configured, placeholders otherwise)",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 12
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of image URLs"
+          }
+        }
+      }
+    },
+    "/reviews/business/{businessId}": {
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Reviews for a shop",
+        "parameters": [
+          {
+            "name": "businessId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "MongoDB ObjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }

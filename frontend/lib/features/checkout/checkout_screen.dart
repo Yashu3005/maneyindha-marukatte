@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
+import 'pay_flow.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -17,6 +18,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   final _pincode = TextEditingController();
   bool _selfPickup = false;
   bool _placing = false;
+  String _payment = 'cod'; // cod | razorpay
 
   Future<void> _placeOrder(Map<String, dynamic> cart) async {
     setState(() => _placing = true);
@@ -30,10 +32,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       final business = cart['business'];
       final businessId = business is Map ? business['_id'] : business;
 
-      await ApiClient.dio.post('/orders', data: {
+      final created = await ApiClient.dio.post('/orders', data: {
         'businessId': businessId,
         'items': items,
         'isSelfPickup': _selfPickup,
+        'paymentMethod': _payment,
         if (!_selfPickup)
           'deliveryAddress': {
             'line1': _line1.text.trim(),
@@ -45,9 +48,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       ref.invalidate(cartProvider);
       ref.invalidate(ordersProvider);
+      var message = 'Order placed 🎉 Pay on delivery.';
+      if (_payment == 'razorpay') {
+        final orderId = created.data['data']['_id'].toString();
+        message = (await payForOrder(orderId)).message;
+        ref.invalidate(ordersProvider);
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Order placed 🎉 Pay on delivery.')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
         context.go('/orders');
       }
     } catch (e) {
@@ -125,12 +133,24 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('Payment: Cash on delivery (online payments arrive in Phase 8)',
-                      style: Theme.of(context).textTheme.bodySmall),
+                  Text('Payment', style: Theme.of(context).textTheme.titleMedium),
+                  RadioListTile<String>(
+                    title: const Text('Cash on delivery'),
+                    value: 'cod',
+                    groupValue: _payment,
+                    onChanged: (v) => setState(() => _payment = v!),
+                  ),
+                  RadioListTile<String>(
+                    title: const Text('Pay online (UPI, card, netbanking)'),
+                    subtitle: const Text('Secure checkout by Razorpay'),
+                    value: 'razorpay',
+                    groupValue: _payment,
+                    onChanged: (v) => setState(() => _payment = v!),
+                  ),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: (canPlace && !_placing) ? () => _placeOrder(c) : null,
-                    child: Text(_placing ? 'Placing order…' : 'Place order'),
+                    child: Text(_placing ? 'Please wait…' : (_payment == 'razorpay' ? 'Place order & pay' : 'Place order')),
                   ),
                 ],
               ),

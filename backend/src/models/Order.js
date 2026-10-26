@@ -50,6 +50,10 @@ const orderSchema = new mongoose.Schema(
       razorpayOrderId: String,
       razorpayPaymentId: String,
       status: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
+      amountPaise: Number,          // what Razorpay was asked to collect (server-computed)
+      paidAt: Date,
+      failureReason: String,
+      needsRefund: { type: Boolean, default: false }, // paid online, then cancelled/rejected — refund manually
     },
     deliveryAddress: {
       line1: String, city: String, pincode: String,

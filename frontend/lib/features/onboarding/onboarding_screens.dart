@@ -1,3 +1,5 @@
+import '../../shared/user_avatar.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -128,6 +130,44 @@ class LandingScreen extends ConsumerWidget {
           child: Text('Sign in with password',
               style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
         ),
+        const _DownloadQr(),
+      ]),
+    );
+  }
+}
+
+/// Scan-to-open QR. Rendered only when the server has a real, validated destination configured.
+class _DownloadQr extends ConsumerWidget {
+  const _DownloadQr();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final info = ref.watch(appDownloadProvider).asData?.value;
+    if (info == null || info['configured'] != true) return const SizedBox.shrink();
+    final label = info['label']?.toString() ?? 'Open the app';
+    return Padding(
+      padding: const EdgeInsets.only(top: 24),
+      child: Column(children: [
+        Semantics(
+          label: 'QR code. Scan with your phone camera to open the app. Destination: $label',
+          image: true,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+            child: Image.network(
+              '${ApiClient.baseUrl}/app/download-qr.png',
+              width: 132, height: 132,
+              errorBuilder: (_, __, ___) => const SizedBox(width: 132, height: 132,
+                  child: Icon(Icons.qr_code_2, size: 48)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text('Scan to open on your phone',
+            style: serif(13, weight: FontWeight.w400, color: MMColors.cream)),
+        Text(label,
+            textAlign: TextAlign.center,
+            style: serif(11, weight: FontWeight.w400, color: MMColors.cream)),
       ]),
     );
   }
@@ -148,10 +188,10 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
   Future<void> _send() async {
     setState(() { _busy = true; _error = null; });
     try {
-      final demo = await ref.read(authProvider.notifier).sendOtp(_email.text.trim());
+      final wait = await ref.read(authProvider.notifier).sendOtp(_email.text.trim());
       if (mounted) {
         context.push('/onboarding/otp',
-            extra: {'email': _email.text.trim(), 'demoOtp': demo});
+            extra: {'email': _email.text.trim(), 'resendAfter': wait});
       }
     } catch (e) {
       setState(() => _error = apiError(e));
@@ -183,8 +223,8 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
 
 class OtpScreen extends ConsumerStatefulWidget {
   final String email;
-  final String? demoOtp;
-  const OtpScreen({super.key, required this.email, this.demoOtp});
+  final int resendAfter;
+  const OtpScreen({super.key, required this.email, this.resendAfter = 60});
   @override
   ConsumerState<OtpScreen> createState() => _OtpScreenState();
 }
@@ -193,6 +233,52 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   final _otp = TextEditingController();
   bool _busy = false;
   String? _error;
+  String? _info;
+  Timer? _timer;
+  int _cooldown = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _cooldown = widget.resendAfter;
+    _runTimer();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _otp.dispose();
+    super.dispose();
+  }
+
+  void _startCooldown(int seconds) {
+    setState(() => _cooldown = seconds);
+    _runTimer();
+  }
+
+  void _runTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return t.cancel();
+      setState(() => _cooldown = _cooldown > 0 ? _cooldown - 1 : 0);
+      if (_cooldown == 0) t.cancel();
+    });
+  }
+
+  Future<void> _resend() async {
+    setState(() { _busy = true; _error = null; _info = null; });
+    try {
+      final wait = await ref.read(authProvider.notifier).sendOtp(widget.email);
+      if (mounted) {
+        _startCooldown(wait);
+        setState(() => _info = 'A new code has been sent.');
+      }
+    } catch (e) {
+      setState(() => _error = apiError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   Future<void> _verify() async {
     setState(() { _busy = true; _error = null; });
@@ -235,14 +321,27 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           onSubmitted: (_) => _verify(),
         ),
         const SizedBox(height: 8),
-        Text('Demo OTP: ${widget.demoOtp ?? '029403'}',
+        Text('We emailed a 6-digit code to ${widget.email}. It expires in 5 minutes.',
+            textAlign: TextAlign.center,
             style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
+        if (_info != null) ...[
+          const SizedBox(height: 8),
+          Text(_info!, style: serif(13, weight: FontWeight.w400, color: MMColors.cream)),
+        ],
         if (_error != null) ...[
           const SizedBox(height: 10),
           Text(_error!, style: const TextStyle(color: Colors.amberAccent)),
         ],
         const SizedBox(height: 24),
         CreamButton(label: _busy ? 'Verifying…' : 'Continue', onTap: _busy ? null : _verify),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: (_busy || _cooldown > 0) ? null : _resend,
+          child: Text(
+            _cooldown > 0 ? 'Resend code in ${_cooldown}s' : 'Resend code',
+            style: serif(14, weight: FontWeight.w400, color: MMColors.cream),
+          ),
+        ),
       ]),
     );
   }
@@ -259,21 +358,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _address = TextEditingController();
-  String? _avatarUrl;
   bool _busy = false;
   String? _error;
 
   Future<void> _continue() async {
-    if (_avatarUrl == null) {
-      setState(() => _error = 'Please choose a profile photo');
-      return;
-    }
     setState(() { _busy = true; _error = null; });
     try {
       await ref.read(authProvider.notifier).updateProfile({
         'name': _name.text.trim(),
         'phone': _phone.text.trim(),
-        'avatarUrl': _avatarUrl,
         'addresses': [
           {'label': 'Home', 'line1': _address.text.trim()}
         ],
@@ -288,7 +381,6 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final photos = ref.watch(imagesProvider('woman portrait smile'));
     final ready = _name.text.trim().length >= 2 &&
         _phone.text.trim().length >= 10 &&
         _address.text.trim().isNotEmpty;
@@ -296,46 +388,18 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Center(child: Text('Create your Profile', style: serif(24, color: MMColors.cream))),
         const SizedBox(height: 20),
-        Center(
-          child: CircleAvatar(
+        const Center(
+          child: UserAvatar(
             radius: 44,
             backgroundColor: MMColors.deepOlive,
-            backgroundImage: _avatarUrl == null ? null : NetworkImage(_avatarUrl!),
-            child: _avatarUrl == null
-                ? const Icon(Icons.camera_alt, color: MMColors.cream)
-                : null,
+            iconColor: MMColors.cream,
           ),
         ),
         const SizedBox(height: 10),
-        Text('Choose your photo (required):',
-            style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 64,
-          child: photos.when(
-            loading: () => const Center(
-                child: CircularProgressIndicator(color: MMColors.cream)),
-            error: (e, _) => Text('Could not load photos',
-                style: serif(12, color: MMColors.cream)),
-            data: (urls) => ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: urls.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (_, i) => GestureDetector(
-                onTap: () => setState(() => _avatarUrl = urls[i]),
-                child: CircleAvatar(
-                  radius: 30,
-                  backgroundImage: NetworkImage(urls[i]),
-                  child: _avatarUrl == urls[i]
-                      ? const CircleAvatar(
-                          radius: 12,
-                          backgroundColor: MMColors.deepOlive,
-                          child: Icon(Icons.check, size: 14, color: MMColors.cream))
-                      : null,
-                ),
-              ),
-            ),
-          ),
+        Center(
+          child: Text('A profile photo is optional — you can add one later.',
+              textAlign: TextAlign.center,
+              style: serif(13, weight: FontWeight.w400, color: MMColors.cream)),
         ),
         const SizedBox(height: 16),
         TextField(controller: _name, onChanged: (_) => setState(() {}),

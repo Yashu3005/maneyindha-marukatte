@@ -14,11 +14,11 @@ A cross-platform marketplace (Android / iOS / Web / PWA) with verified business 
 | Mobile/Web app | Flutter, Riverpod, Material 3, go_router |
 | Backend | Node.js, Express, Socket.IO |
 | Database | MongoDB Atlas + Redis |
-| Auth | Firebase Auth → backend JWT exchange |
-| Payments | Razorpay (UPI, cards, wallets, COD) |
-| Media | Cloudinary + Firebase Storage |
-| Maps | Google Maps Platform |
-| AI | Provider-agnostic layer (Gemini / OpenAI) |
+| Auth | Email one-time code via Resend → backend JWT (+ revocable refresh sessions) |
+| Payments | Razorpay Standard Checkout (test mode first) + cash on delivery |
+| Media | Cloudinary (profile photos); optional Pexels stock suggestions |
+| Location | Device geolocation (permission-based) + server-side distance; no maps provider yet |
+| AI | Provider-agnostic layer: Gemini (default) / OpenAI over REST |
 | Deploy | Vercel (web) + Railway/Render (API) |
 
 ## Repository Structure
@@ -40,7 +40,7 @@ git clone https://github.com/<you>/maneyindha-marukatte.git
 cd maneyindha-marukatte
 
 # 2. Environment
-cp .env.example .env   # fill in MongoDB, JWT secrets at minimum (API reads backend/.env or this root .env)
+cp .env.example .env   # MongoDB + JWT secrets are required; Resend is required to sign in (see below)
 
 # 3. Local infrastructure
 docker compose up -d mongo redis
@@ -53,9 +53,21 @@ cd backend && npm install && npm run dev   # http://localhost:5000/health (PORT 
 cd ../frontend && flutter pub get && flutter run -d chrome
 ```
 
+## Feature setup (all optional except email sign-in)
+| Feature | What you need | Details |
+|---|---|---|
+| Email sign-in | `RESEND_API_KEY` + `RESEND_FROM_EMAIL` on a **verified domain** (Gmail addresses cannot send) | [`docs/authentication.md`](docs/authentication.md) |
+| Online payment | Razorpay **test** keys + webhook secret | [`docs/payments.md`](docs/payments.md) |
+| Product descriptions by AI | `GEMINI_API_KEY` (or `AI_PROVIDER=openai` + `OPENAI_API_KEY`) | [`docs/ai.md`](docs/ai.md) |
+| Profile photos | `CLOUDINARY_*` | [`docs/security.md`](docs/security.md) |
+| Landing-page QR | `APP_DOWNLOAD_URL` (or `APP_WEB_URL` / `APP_ANDROID_URL` / `APP_IOS_URL`), public https only | [`docs/deployment.md`](docs/deployment.md) |
+| Near me | none (browser/device permission) | [`docs/location.md`](docs/location.md) |
+
+API reference: `/api/docs` (Swagger UI) and [`backend/src/docs/openapi.json`](backend/src/docs/openapi.json). What was and was not verified: [`docs/IMPLEMENTATION_REPORT.md`](docs/IMPLEMENTATION_REPORT.md).
+
 ## Testing
 ```bash
-cd backend && npm test && npm run lint
+cd backend && npm ci && npm test && npm run lint
 cd frontend && flutter analyze && flutter test
 ```
 
@@ -65,7 +77,7 @@ cd frontend && flutter analyze && flutter test
 - Never commit secrets; use Vercel/host env vars (`docs/security.md`)
 
 ## Documentation
-See [`docs/`](docs/) — architecture, database, API, auth, payments, deployment, GitHub workflow, security, AI, testing, roadmap.
+See [`docs/`](docs/) — architecture, database, API, auth, payments, location, deployment, GitHub workflow, security, AI, testing, roadmap, and the audit and implementation reports.
 
 ## Branch Workflow
 `feature/*` → PR → `develop` → release PR → `main` → production deploy.

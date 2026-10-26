@@ -1,6 +1,8 @@
+import '../../shared/user_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
@@ -92,12 +94,10 @@ class _DashboardTab extends ConsumerWidget {
       child: SafeArea(
         child: ListView(padding: const EdgeInsets.all(16), children: [
           Row(children: [
-            CircleAvatar(
+            UserAvatar(
+              url: auth.user?['avatarUrl']?.toString(),
               radius: 26,
               backgroundColor: MMColors.cream,
-              backgroundImage: (auth.user?['avatarUrl'] != null)
-                  ? NetworkImage(auth.user!['avatarUrl'].toString())
-                  : null,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -183,6 +183,8 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
     final stock = TextEditingController(text: '10');
     final description = TextEditingController();
     String? imageUrl;
+    bool aiBusy = false;
+    String? aiNote;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -194,6 +196,7 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 TextField(controller: name,
+                    onChanged: (_) => setD(() {}),
                     decoration: const InputDecoration(labelText: 'Name')),
                 const SizedBox(height: 10),
                 TextField(controller: price, keyboardType: TextInputType.number,
@@ -202,8 +205,41 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
                 TextField(controller: stock, keyboardType: TextInputType.number,
                     decoration: const InputDecoration(labelText: 'Stock')),
                 const SizedBox(height: 10),
-                TextField(controller: description, maxLines: 2,
+                TextField(controller: description, maxLines: 3,
                     decoration: const InputDecoration(labelText: 'Description')),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: aiBusy
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.auto_awesome, size: 18),
+                    label: const Text('Write with AI'),
+                    onPressed: (aiBusy || name.text.trim().length < 2)
+                        ? null
+                        : () async {
+                            setD(() { aiBusy = true; aiNote = null; });
+                            try {
+                              final res = await ApiClient.dio.post('/ai/product-description', data: {
+                                'name': name.text.trim(),
+                                if (description.text.trim().isNotEmpty)
+                                  'details': description.text.trim(),
+                              });
+                              description.text = res.data['data']['description'].toString();
+                              if (ctx2.mounted) setD(() => aiNote = 'AI draft added — please review and edit before saving.');
+                            } catch (e) {
+                              if (ctx2.mounted) setD(() => aiNote = apiError(e));
+                            } finally {
+                              if (ctx2.mounted) setD(() => aiBusy = false);
+                            }
+                          },
+                  ),
+                ),
+                if (aiNote != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(aiNote!, style: Theme.of(ctx2).textTheme.bodySmall),
+                  ),
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -485,6 +521,38 @@ class _EarningsTab extends ConsumerWidget {
 }
 
 // ---------------- Profile ----------------
+const _maxPhotoBytes = 2 * 1024 * 1024;
+
+void _toast(BuildContext context, String m) =>
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+
+/// Optional profile photo. The server re-validates type, size and who is asking.
+Future<void> _changePhoto(BuildContext context, WidgetRef ref) async {
+  try {
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, maxWidth: 1024, imageQuality: 85);
+    if (picked == null) return; // cancelled
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > _maxPhotoBytes) {
+      if (context.mounted) _toast(context, 'Please choose an image under 2 MB.');
+      return;
+    }
+    await ref.read(authProvider.notifier).uploadAvatar(bytes, picked.name);
+    if (context.mounted) _toast(context, 'Profile photo updated.');
+  } catch (e) {
+    if (context.mounted) _toast(context, apiError(e));
+  }
+}
+
+Future<void> _removePhoto(BuildContext context, WidgetRef ref) async {
+  try {
+    await ref.read(authProvider.notifier).removeAvatar();
+    if (context.mounted) _toast(context, 'Profile photo removed.');
+  } catch (e) {
+    if (context.mounted) _toast(context, apiError(e));
+  }
+}
+
 class _SellerProfileTab extends ConsumerWidget {
   const _SellerProfileTab();
 
@@ -561,13 +629,25 @@ class _SellerProfileTab extends ConsumerWidget {
       color: MMColors.olive,
       child: SafeArea(
         child: ListView(padding: const EdgeInsets.all(16), children: [
-          Center(child: CircleAvatar(
+          Center(child: UserAvatar(
+            url: auth.user?['avatarUrl']?.toString(),
             radius: 44,
             backgroundColor: MMColors.cream,
-            backgroundImage: (auth.user?['avatarUrl'] != null)
-                ? NetworkImage(auth.user!['avatarUrl'].toString())
-                : null,
           )),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            TextButton.icon(
+              style: TextButton.styleFrom(foregroundColor: MMColors.cream),
+              icon: const Icon(Icons.photo_camera_outlined, size: 18),
+              label: Text(auth.user?['avatarUrl'] == null ? 'Add photo (optional)' : 'Change photo'),
+              onPressed: () => _changePhoto(context, ref),
+            ),
+            if (auth.user?['avatarUrl'] != null)
+              TextButton(
+                style: TextButton.styleFrom(foregroundColor: MMColors.cream),
+                onPressed: () => _removePhoto(context, ref),
+                child: const Text('Remove'),
+              ),
+          ]),
           const SizedBox(height: 12),
           Center(child: Text(auth.name, style: serif(22, color: MMColors.cream))),
           Center(child: Text(auth.email,

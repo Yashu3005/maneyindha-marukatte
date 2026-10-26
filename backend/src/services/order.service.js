@@ -30,7 +30,8 @@ async function releaseCoupon(couponId) {
     .catch((e) => logger.error(`coupon rollback failed for ${couponId}: ${e.message}`));
 }
 
-exports.createOrder = async (customerId, { businessId, items, deliveryAddress, isSelfPickup, notes, couponCode }) => {
+exports.createOrder = async (customerId, { businessId, items, deliveryAddress, isSelfPickup, notes, couponCode, paymentMethod }) => {
+  const method = paymentMethod === 'razorpay' ? 'razorpay' : 'cod';
   if (!items?.length) throw new AppError('Order must contain at least one item', 422);
 
   const business = await Business.findOne({ _id: businessId, isActive: true, 'verification.status': 'approved' });
@@ -104,6 +105,7 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
       deliveryAddress: isSelfPickup ? undefined : deliveryAddress,
       isSelfPickup: !!isSelfPickup,
       notes,
+      payment: { method, status: 'pending' },
       statusHistory: [{ status: 'pending', at: new Date() }],
     });
   } catch (err) {
@@ -152,6 +154,11 @@ exports.transition = async (orderId, nextStatus, user) => {
     (isCustomer && nextStatus === 'cancelled' && CUSTOMER_CANCELLABLE_FROM.includes(order.status));
   if (!permitted) throw new AppError('You are not allowed to make this status change', 403);
 
+  // An online-payment order is only accepted by the shop once the payment is confirmed (server-side).
+  if (nextStatus === 'confirmed' && order.payment?.method === 'razorpay' && order.payment.status !== 'paid') {
+    throw new AppError('Payment for this order has not been confirmed yet', 409, 'PAYMENT_PENDING');
+  }
+
   const allowed = VALID_TRANSITIONS[order.status] || [];
   if (!allowed.includes(nextStatus)) {
     throw new AppError(`Invalid transition ${order.status} -> ${nextStatus}`, 422);
@@ -164,6 +171,12 @@ exports.transition = async (orderId, nextStatus, user) => {
     { new: true }
   );
   if (!updated) throw new AppError('Order status changed, please retry', 409);
+
+  // Money was taken online but the order will not be fulfilled: flag it for a (manual) refund.
+  if (RELEASING_STATUSES.includes(nextStatus) && order.payment?.status === 'paid') {
+    await Order.updateOne({ _id: order._id }, { $set: { 'payment.needsRefund': true } });
+    logger.warn(`Order ${order._id} ${nextStatus} after online payment; manual refund needed`);
+  }
 
   if (RELEASING_STATUSES.includes(nextStatus)) {
     await releaseStock(order.items);

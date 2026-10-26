@@ -99,7 +99,7 @@ async function run() {
   for (const s of shopSpecs) {
     shops[s.slug] = await Business.create({
       owner: asha._id, name: s.name, slug: s.slug, description: s.desc,
-      category: cats[s.cat]._id, location: s.loc,
+      category: cats[s.cat]._id, location: s.loc, locationSource: 'manual',
       address: { line1: s.line1, city: 'Bengaluru', state: 'KA', pincode: '560011' },
       verification: approved, isOpen: true,
       logoUrl: await img(s.photo, s.fallback, `${s.slug}-logo`, 300, 300),

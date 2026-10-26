@@ -10,6 +10,8 @@ const businessController = require('../src/controllers/business.controller');
 const productController = require('../src/controllers/product.controller');
 const usersController = require('../src/controllers/users.controller');
 const cartService = require('../src/services/cart.service');
+const RefreshSession = require('../src/models/RefreshSession');
+const { installMemoryModel } = require('./fakes/memoryModel');
 
 function run(handler, req) {
   return new Promise((resolve) => {
@@ -43,7 +45,9 @@ describe('POST /businesses mass-assignment', () => {
       expect(saved).not.toHaveProperty(k);
     }
     expect(saved.slug).toMatch(/^asha-s-shop-/);
-    expect(saved.location.coordinates).toHaveLength(2);
+    // No fabricated default location any more.
+    expect(saved.location).toBeUndefined();
+    expect(saved.locationSource).toBe('unset');
   });
   test('category NAME resolves to an id without renaming an existing category', async () => {
     const catId = oid();
@@ -112,7 +116,7 @@ describe('business visibility & document privacy', () => {
     c.then = (r) => Promise.resolve([]).then(r);
     const find = jest.spyOn(Business, 'find').mockReturnValue(c);
     await run(businessController.nearby, { query: { lat: '12', lng: '77', radiusKm: '999999', limit: '99999' } });
-    expect(find.mock.calls[0][0].location.$near.$maxDistance).toBe(200 * 1000);
+    expect(find.mock.calls[0][0].publicLocation.$near.$maxDistance).toBe(200 * 1000);
     expect(c.limit).toHaveBeenCalledWith(50);
   });
 });
@@ -214,6 +218,7 @@ describe('users', () => {
   });
   test('customer -> entrepreneur still works and returns fresh tokens', async () => {
     const u = { ...user('customer'), name: 'n' };
+    installMemoryModel(RefreshSession);
     jest.spyOn(User, 'findById').mockResolvedValue(u);
     jest.spyOn(Business, 'exists').mockResolvedValue(null);
     const { body } = await run(usersController.switchRole, { user: { id: 'x' }, body: { role: 'entrepreneur' } });

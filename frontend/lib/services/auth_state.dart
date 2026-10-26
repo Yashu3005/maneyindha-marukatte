@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_client.dart';
@@ -55,10 +56,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _apply(res.data['data'] as Map<String, dynamic>);
   }
 
-  Future<String?> sendOtp(String email) async {
+  /// Asks the backend to email a one-time code (via Resend). Returns how many
+  /// seconds the user must wait before requesting another one.
+  Future<int> sendOtp(String email) async {
     final res = await ApiClient.dio.post('/auth/otp/send', data: {'email': email});
     final data = Map<String, dynamic>.from(res.data['data'] as Map);
-    return data['demoOtp']?.toString();
+    return (data['resendAfterSeconds'] as num?)?.toInt() ?? 60;
   }
 
   Future<bool> verifyOtp(String email, String otp) async {
@@ -67,6 +70,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final data = Map<String, dynamic>.from(res.data['data'] as Map);
     await _apply(data);
     return data['isNewUser'] == true;
+  }
+
+  /// Uploads a profile photo (JPEG/PNG/WebP, max 2 MB — enforced again by the server).
+  Future<void> uploadAvatar(List<int> bytes, String filename) async {
+    final form = FormData.fromMap({'avatar': MultipartFile.fromBytes(bytes, filename: filename)});
+    final res = await ApiClient.dio.post('/users/me/avatar', data: form);
+    await _saveUser(Map<String, dynamic>.from(res.data['data'] as Map));
+  }
+
+  Future<void> removeAvatar() async {
+    final res = await ApiClient.dio.delete('/users/me/avatar');
+    await _saveUser(Map<String, dynamic>.from(res.data['data'] as Map));
   }
 
   Future<void> updateProfile(Map<String, dynamic> fields) async {
@@ -95,6 +110,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    // Revoke the server-side session first (best effort), then clear local state.
+    final refresh = TokenStore.refreshToken;
+    if (refresh != null) {
+      try {
+        await ApiClient.dio.post('/auth/logout', data: {'refreshToken': refresh});
+      } catch (_) {}
+    }
     await TokenStore.save(null);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('user');

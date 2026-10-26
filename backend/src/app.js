@@ -19,6 +19,8 @@ if (trustProxy) app.set('trust proxy', Number.isNaN(Number(trustProxy)) ? trustP
 
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim()) : '*' }));
+// Razorpay signs the exact bytes it sends, so the webhook must see the raw body: mount it BEFORE express.json.
+app.post('/api/v1/payments/razorpay/webhook', express.raw({ type: '*/*', limit: '1mb' }), require('./controllers/payment.controller').webhook);
 app.use(express.json({ limit: '1mb' }));
 app.use(mongoSanitize());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true }));

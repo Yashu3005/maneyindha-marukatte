@@ -25,7 +25,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final extra = (s.extra as Map?) ?? {};
           return OtpScreen(
             email: extra['email']?.toString() ?? '',
-            demoOtp: extra['demoOtp']?.toString(),
+            resendAfter: (extra['resendAfter'] as num?)?.toInt() ?? 60,
           );
         },
       ),

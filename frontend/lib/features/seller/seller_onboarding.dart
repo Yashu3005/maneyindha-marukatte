@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
+import '../../services/device_location.dart';
 import '../../services/repositories.dart';
 import '../../theme/app_theme.dart';
 import '../onboarding/onboarding_screens.dart';
@@ -25,6 +26,20 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
   String? _years;
   bool _busy = false;
   String? _error;
+  double? _lat, _lng; // only ever set from the device, after the owner taps the button
+  bool _locating = false;
+
+  Future<void> _useMyLocation() async {
+    setState(() { _locating = true; _error = null; });
+    final loc = await getDeviceLocation();
+    if (!mounted) return;
+    setState(() {
+      _locating = false;
+      if (loc.isOk) { _lat = loc.lat; _lng = loc.lng; } else {
+        _error = '${loc.message} You can continue without it and add it later.';
+      }
+    });
+  }
 
   Future<void> _next() async {
     setState(() { _busy = true; _error = null; });
@@ -35,6 +50,10 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         'yearsOfExperience': _years,
         'description': '$_category business by ${ref.read(authProvider).name}',
         'address': {'line1': _address.text.trim(), 'city': 'Bengaluru'},
+        if (_lat != null && _lng != null) ...{
+          'location': {'type': 'Point', 'coordinates': [_lng, _lat]},
+          'locationSource': 'device',
+        },
       });
       final business = Map<String, dynamic>.from(res.data['data'] as Map);
       ref.invalidate(myBusinessesProvider);
@@ -88,6 +107,21 @@ class _BusinessInfoScreenState extends ConsumerState<BusinessInfoScreen> {
         const SizedBox(height: 6),
         TextField(controller: _address, onChanged: (_) => setState(() {}),
             decoration: const InputDecoration(hintText: 'Enter your Address')),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          style: TextButton.styleFrom(foregroundColor: MMColors.cream),
+          onPressed: _locating ? null : _useMyLocation,
+          icon: _locating
+              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+              : Icon(_lat == null ? Icons.my_location : Icons.check_circle_outline, size: 18),
+          label: Text(_lat == null
+              ? 'Use my current location (optional)'
+              : 'Location added — customers nearby can find you'),
+        ),
+        Text(
+          'Optional. Customers see your shop area only roughly (about 100 m), never your exact point.',
+          style: serif(12, weight: FontWeight.w400, color: MMColors.cream),
+        ),
         if (_error != null) ...[
           const SizedBox(height: 10),
           Text(_error!, style: const TextStyle(color: Colors.amberAccent)),
@@ -183,7 +217,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ready = _idUrl != null && _proofUrl != null && _photoUrl != null;
+    final ready = _idUrl != null && _proofUrl != null; // business photo is optional
     return OliveScaffold(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Center(child: Text('Upload Documents', style: serif(24, color: MMColors.cream))),
@@ -204,7 +238,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
           final u = await _pick('business certificate document');
           if (u != null) setState(() => _proofUrl = u);
         }),
-        _uploadTile('Business Profile Photo', _photoUrl, () async {
+        _uploadTile('Business Profile Photo (optional)', _photoUrl, () async {
           final u = await _pick('woman small business shop');
           if (u != null) setState(() => _photoUrl = u);
         }),
@@ -247,7 +281,7 @@ class _ReviewDetailsScreenState extends ConsumerState<ReviewDetailsScreen> {
           'documents': [
             {'type': 'id_proof', 'url': data['idUrl'], 'identityType': data['identityType']},
             {'type': 'business_proof', 'url': data['proofUrl']},
-            {'type': 'profile_photo', 'url': data['photoUrl']},
+            if (data['photoUrl'] != null) {'type': 'profile_photo', 'url': data['photoUrl']},
           ],
         },
       );

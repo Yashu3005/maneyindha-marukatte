@@ -1,3 +1,5 @@
+import '../../shared/user_avatar.dart';
+import '../../services/device_location.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -50,11 +52,43 @@ class _CustomerHome extends ConsumerStatefulWidget {
 class _CustomerHomeState extends ConsumerState<_CustomerHome> {
   String _query = '';
   String? _category;
+  String? _pos; // "lat,lng" once the user has chosen to share their location
+  bool _locating = false;
+
+  /// Asked for only when the user taps "Near me"; the dialog explains why before any permission prompt.
+  Future<void> _useLocation() async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Find shops near you'),
+        content: const Text(
+            'We use your device location once to show shops close to you and how far they are. '
+            'It is not stored or shared. You can keep browsing all shops without it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not now')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Use my location')),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    setState(() => _locating = true);
+    final loc = await getDeviceLocation();
+    if (!mounted) return;
+    setState(() {
+      _locating = false;
+      if (loc.isOk) _pos = '${loc.lat},${loc.lng}';
+    });
+    if (!loc.isOk) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${loc.message} Showing all shops instead.')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final businesses = ref.watch(businessesProvider);
+    final businesses =
+        _pos == null ? ref.watch(businessesProvider) : ref.watch(nearbyBusinessesProvider(_pos!));
     final products = ref.watch(productsProvider(null));
 
     return SafeArea(
@@ -73,11 +107,9 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                   const Text('Discover home-made treasures near you'),
                 ]),
               ),
-              CircleAvatar(
+              UserAvatar(
+                url: auth.user?['avatarUrl']?.toString(),
                 backgroundColor: MMColors.sage,
-                backgroundImage: (auth.user?['avatarUrl'] != null)
-                    ? NetworkImage(auth.user!['avatarUrl'].toString())
-                    : null,
               ),
             ]),
             const SizedBox(height: 16),
@@ -147,7 +179,19 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
               ),
             ),
             const SizedBox(height: 20),
-            Text('Nearby shops', style: serif(18)),
+            Row(children: [
+              Expanded(child: Text(_pos == null ? 'Shops' : 'Shops near you', style: serif(18))),
+              if (_pos == null)
+                TextButton.icon(
+                  onPressed: _locating ? null : _useLocation,
+                  icon: _locating
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.my_location, size: 18),
+                  label: const Text('Near me'),
+                )
+              else
+                TextButton(onPressed: () => setState(() => _pos = null), child: const Text('Show all')),
+            ]),
             const SizedBox(height: 8),
             SizedBox(
               height: 170,
@@ -163,7 +207,10 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                     return c is Map && c['name'] == _category;
                   }).toList();
                   if (filtered.isEmpty) {
-                    return const EmptyView(message: 'No shops in this category yet.');
+                    return EmptyView(
+                        message: _pos == null
+                            ? 'No shops in this category yet.'
+                            : 'No shops with a shared location within 25 km.');
                   }
                   return ListView.separated(
                     scrollDirection: Axis.horizontal,
@@ -250,9 +297,12 @@ class _ShopCard extends StatelessWidget {
                 ]),
                 const SizedBox(height: 4),
                 Text(
-                  (rating['count'] ?? 0) == 0
-                      ? 'New shop'
-                      : '★ ${rating['avg']} (${rating['count']})',
+                  [
+                    (rating['count'] ?? 0) == 0
+                        ? 'New shop'
+                        : '★ ${rating['avg']} (${rating['count']})',
+                    if (business['distanceKm'] != null) '${business['distanceKm']} km away',
+                  ].join(' · '),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ]),
@@ -324,12 +374,10 @@ class _CustomerProfile extends ConsumerWidget {
     final auth = ref.watch(authProvider);
     return SafeArea(
       child: ListView(padding: const EdgeInsets.all(16), children: [
-        Center(child: CircleAvatar(
+        Center(child: UserAvatar(
+          url: auth.user?['avatarUrl']?.toString(),
           radius: 44,
           backgroundColor: MMColors.sage,
-          backgroundImage: (auth.user?['avatarUrl'] != null)
-              ? NetworkImage(auth.user!['avatarUrl'].toString())
-              : null,
         )),
         const SizedBox(height: 12),
         Center(child: Text(auth.name, style: serif(22))),

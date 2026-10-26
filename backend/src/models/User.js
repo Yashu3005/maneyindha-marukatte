@@ -11,6 +11,7 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, select: false },
     role: { type: String, enum: ROLES, default: 'customer', index: true },
     username: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
+    emailVerified: { type: Boolean, default: false },
     profileComplete: { type: Boolean, default: false },
     securityQuestions: { type: mongoose.Schema.Types.Mixed, select: false },
     bankAccount: { type: mongoose.Schema.Types.Mixed },
@@ -25,8 +26,8 @@ const userSchema = new mongoose.Schema(
         state: String,
         pincode: String,
         location: {
-          type: { type: String, enum: ['Point'], default: 'Point' },
-          coordinates: { type: [Number], default: [0, 0] }, // [lng, lat]
+          type: { type: String, enum: ['Point'] },
+          coordinates: { type: [Number], default: undefined }, // [lng, lat]; absent unless the user shared a location
         },
       },
     ],
