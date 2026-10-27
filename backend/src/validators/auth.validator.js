@@ -23,3 +23,8 @@ exports.verifyOtpSchema = Joi.object({
   email: Joi.string().trim().email().lowercase().max(254).required(),
   otp: Joi.string().pattern(/^\d{6}$/).required().messages({ 'string.pattern.base': 'otp must be 6 digits' }),
 });
+
+exports.adminLoginSchema = Joi.object({
+  username: Joi.string().trim().max(64).required(),
+  password: Joi.string().max(256).required(),
+});

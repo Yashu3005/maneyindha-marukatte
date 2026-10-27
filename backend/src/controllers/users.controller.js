@@ -80,6 +80,10 @@ exports.setCredentials = async (req, res, next) => {
     const user = await User.findById(req.user.id);
     if (!user) throw new AppError('User not found', 404);
     if (username) {
+      // The administrator's username is reserved: nobody else may take it.
+      if (username.trim().toLowerCase() === require('../services/adminAuth.service').adminUsername()) {
+        throw new AppError('Username already taken', 409);
+      }
       const clash = await User.findOne({ username: username.toLowerCase(), _id: { $ne: user._id } });
       if (clash) throw new AppError('Username already taken', 409);
       user.username = username.toLowerCase();

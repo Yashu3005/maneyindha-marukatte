@@ -10,9 +10,10 @@ const optStr = (max) => Joi.string().trim().max(max).allow('');
 
 router.get('/', businessController.list);
 router.get('/mine', requireAuth, requireRole('entrepreneur'), businessController.mine);
-router.get('/nearby', businessController.nearby);          // ?lat=&lng=&radiusKm=
+router.get('/nearby', businessController.nearby);          // ?lat=&lng=&radiusKm=&sort=&category=&minRating=&openNow=&hasVideo=&q=
 // Owner-only: set the shop's exact location (from the device or typed in by hand).
 router.patch('/:id/location', requireAuth, requireRole('entrepreneur'), validate(geo.setLocationSchema), businessController.setLocation);
+router.get('/:id/rating-summary', businessController.ratingSummary);
 router.get('/:id', optionalAuth, businessController.getById);
 router.post('/', requireAuth, requireRole('entrepreneur'),
   validate(Joi.object({
@@ -57,5 +58,13 @@ router.post('/:id/documents', ...ownerOnly, docLimiter, receiveDoc,
 router.delete('/:id/documents/:docId', ...ownerOnly, businessController.removeDocument);
 // Entrepreneur submits → status: in_review (needs ID proof + business proof uploaded)
 router.post('/:id/verification-documents', ...ownerOnly, validate(Joi.object({})), businessController.uploadDocs);
+
+
+// Promo video: the browser uploads straight to Cloudinary with a signature from here, then reports it for checking.
+router.post('/:id/promo-video/signature', ...ownerOnly, rateLimit({ windowMs: 60 * 60 * 1000, max: 20, standardHeaders: true }), businessController.promoSignature);
+router.post('/:id/promo-video', ...ownerOnly,
+  validate(Joi.object({ publicId: Joi.string().max(120).required(), title: optStr(80), caption: optStr(240) })),
+  businessController.promoAttach);
+router.delete('/:id/promo-video', ...ownerOnly, businessController.promoRemove);
 
 module.exports = router;

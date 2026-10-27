@@ -10,6 +10,7 @@ import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
 import '../cart/cart_screen.dart';
 import '../orders/orders_screen.dart';
+import '../rewards/rewards_screen.dart';
 
 /// Zomato-style customer app: bottom nav Home · Orders · Cart · Profile.
 class CustomerShell extends ConsumerStatefulWidget {
@@ -72,9 +73,19 @@ class _CustomerHome extends ConsumerStatefulWidget {
 
 class _CustomerHomeState extends ConsumerState<_CustomerHome> {
   String _query = '';
-  String? _category;
-  String? _pos; // "lat,lng" once the user has chosen to share their location
+  ShopFilters _filters = const ShopFilters(); // pos = "lat,lng" once the user chose to share their location
   bool _locating = false;
+
+  /// Filter sheet: min rating, open now, has video, sort, distance. Applied on the server, never faked client-side.
+  Future<void> _openFilters() async {
+    final result = await showModalBottomSheet<ShopFilters>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _FilterSheet(initial: _filters),
+    );
+    if (result != null && mounted) setState(() => _filters = result);
+  }
 
   /// Asked for only when the user taps "Near me"; the dialog explains why before any permission prompt.
   Future<void> _useLocation() async {
@@ -97,7 +108,7 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
     if (!mounted) return;
     setState(() {
       _locating = false;
-      if (loc.isOk) _pos = '${loc.lat},${loc.lng}';
+      if (loc.isOk) _filters = _filters.copyWith(pos: '${loc.lat},${loc.lng}', sort: 'nearest');
     });
     if (!loc.isOk) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -108,14 +119,16 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
-    final businesses =
-        _pos == null ? ref.watch(businessesProvider) : ref.watch(nearbyBusinessesProvider(_pos!));
+    final businesses = ref.watch(shopsProvider(_filters));
+    // Category circles always come from the unfiltered list so they don't vanish once one is chosen.
+    final allShops = ref.watch(shopsProvider(const ShopFilters()));
+    final badge = auth.isLoggedIn ? ref.watch(rewardsProvider).valueOrNull?['badge'] as Map? : null;
     final products = ref.watch(productsProvider(null));
 
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(businessesProvider);
+          ref.invalidate(shopsProvider);
           ref.invalidate(productsProvider);
         },
         child: ListView(
@@ -136,6 +149,13 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                     const SizedBox(height: 4),
                     Text('Discover home-made treasures near you',
                         style: TextStyle(color: MMColors.cream.withOpacity(0.85))),
+                    if (badge != null) ...[
+                      const SizedBox(height: 10),
+                      InkWell(
+                        onTap: () => context.push('/rewards'),
+                        child: BadgeChip(badge: badge, onDark: true),
+                      ),
+                    ],
                   ]),
                 ),
                 const SizedBox(width: 12),
@@ -143,12 +163,27 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                   padding: const EdgeInsets.all(3),
                   decoration: const BoxDecoration(color: MMColors.cream, shape: BoxShape.circle),
                   child: UserAvatar(
-                    url: auth.user?['avatarUrl']?.toString(),
-                    backgroundColor: MMColors.sage,
+                    name: auth.name,
                   ),
                 ),
               ]),
             ),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.card_giftcard, label: 'Rewards & coupons',
+                  onTap: () => auth.isLoggedIn ? context.push('/rewards') : context.push('/login'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _QuickAction(
+                  icon: Icons.support_agent, label: 'Ask the assistant',
+                  onTap: () => context.push('/assistant'),
+                ),
+              ),
+            ]),
             const SizedBox(height: 16),
             TextField(
               onChanged: (v) => setState(() => _query = v.toLowerCase()),
@@ -162,7 +197,7 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
             const SizedBox(height: 8),
             SizedBox(
               height: 110,
-              child: businesses.when(
+              child: allShops.when(
                 loading: () => const SizedBox(),
                 error: (e, _) => const SizedBox(),
                 data: (shops) {
@@ -182,10 +217,10 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                     separatorBuilder: (_, __) => const SizedBox(width: 10),
                     itemBuilder: (_, i) {
                       final name = list[i];
-                      final selected = _category == name;
+                      final selected = _filters.category == name;
                       return GestureDetector(
-                        onTap: () => setState(
-                            () => _category = selected ? null : name),
+                        onTap: () => setState(() =>
+                            _filters = _filters.copyWith(category: selected ? null : name)),
                         child: Column(children: [
                           Container(
                             width: 78, height: 78,
@@ -217,8 +252,8 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
             ),
             const SizedBox(height: 20),
             Row(children: [
-              Expanded(child: Text(_pos == null ? 'Shops' : 'Shops near you', style: serif(18))),
-              if (_pos == null)
+              Expanded(child: Text(_filters.pos == null ? 'Shops' : 'Shops near you', style: serif(18))),
+              if (_filters.pos == null)
                 TextButton.icon(
                   onPressed: _locating ? null : _useLocation,
                   icon: _locating
@@ -227,33 +262,70 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                   label: const Text('Near me'),
                 )
               else
-                TextButton(onPressed: () => setState(() => _pos = null), child: const Text('Show all')),
+                TextButton(
+                  onPressed: () => setState(() => _filters = _filters.copyWith(
+                      pos: null, sort: _filters.sort == 'nearest' ? 'rating' : _filters.sort)),
+                  child: const Text('Show all'),
+                ),
+              Badge(
+                isLabelVisible: _filters.activeCount > 0,
+                label: Text('${_filters.activeCount}'),
+                backgroundColor: MMColors.clay,
+                child: OutlinedButton.icon(
+                  onPressed: _openFilters,
+                  icon: const Icon(Icons.tune, size: 18),
+                  label: const Text('Filters'),
+                ),
+              ),
             ]),
+            if (_filters.activeCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Wrap(spacing: 6, runSpacing: 4, children: [
+                  if (_filters.category != null)
+                    InputChip(
+                      label: Text(_filters.category!),
+                      onDeleted: () => setState(() => _filters = _filters.copyWith(category: null)),
+                    ),
+                  if (_filters.minRating > 0)
+                    InputChip(
+                      label: Text('${_filters.minRating.toStringAsFixed(0)}★ & up'),
+                      onDeleted: () => setState(() => _filters = _filters.copyWith(minRating: 0)),
+                    ),
+                  if (_filters.openNow)
+                    InputChip(
+                      label: const Text('Open now'),
+                      onDeleted: () => setState(() => _filters = _filters.copyWith(openNow: false)),
+                    ),
+                  if (_filters.hasVideo)
+                    InputChip(
+                      label: const Text('Has video'),
+                      onDeleted: () => setState(() => _filters = _filters.copyWith(hasVideo: false)),
+                    ),
+                ]),
+              ),
             const SizedBox(height: 8),
             SizedBox(
-              height: 170,
+              height: 178,
               child: businesses.when(
                 loading: () => const LoadingView(),
                 error: (e, _) => ErrorView(
                     message: 'Could not load shops.',
-                    onRetry: () => ref.invalidate(businessesProvider)),
+                    onRetry: () => ref.invalidate(shopsProvider)),
                 data: (shops) {
-                  final filtered = shops.where((b) {
-                    if (_category == null) return true;
-                    final c = b['category'];
-                    return c is Map && c['name'] == _category;
-                  }).toList();
-                  if (filtered.isEmpty) {
+                  if (shops.isEmpty) {
                     return EmptyView(
-                        message: _pos == null
-                            ? 'No shops in this category yet.'
-                            : 'No shops with a shared location within 25 km.');
+                        message: _filters.pos != null
+                            ? 'No shops with a shared location within ${_filters.radiusKm.round()} km.'
+                            : _filters.activeCount > 0
+                                ? 'No shops match these filters.'
+                                : 'No shops yet.');
                   }
                   return ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    itemCount: filtered.length,
+                    itemCount: shops.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 12),
-                    itemBuilder: (_, i) => _ShopCard(business: filtered[i]),
+                    itemBuilder: (_, i) => _ShopCard(business: shops[i]),
                   );
                 },
               ),
@@ -325,8 +397,20 @@ class _ShopCard extends StatelessWidget {
         child: InkWell(
           onTap: () => context.push('/business/${business['_id']}'),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(height: 90, width: double.infinity,
-                child: NetImage(business['bannerUrl']?.toString())),
+            SizedBox(
+              height: 90, width: double.infinity,
+              child: Stack(fit: StackFit.expand, children: [
+                NetImage(business['bannerUrl']?.toString()),
+                if (business['promoVideo'] is Map && (business['promoVideo'] as Map)['url'] != null)
+                  const Positioned(
+                    right: 8, top: 8,
+                    child: CircleAvatar(
+                      radius: 13, backgroundColor: Colors.black54,
+                      child: Icon(Icons.play_arrow_rounded, size: 18, color: Colors.white),
+                    ),
+                  ),
+              ]),
+            ),
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -429,9 +513,8 @@ class _CustomerProfile extends ConsumerWidget {
               padding: const EdgeInsets.all(4),
               decoration: const BoxDecoration(color: MMColors.cream, shape: BoxShape.circle),
               child: UserAvatar(
-                url: auth.user?['avatarUrl']?.toString(),
+                name: auth.name,
                 radius: 44,
-                backgroundColor: MMColors.sage,
               ),
             ),
             const SizedBox(height: 12),
@@ -469,16 +552,16 @@ class _CustomerProfile extends ConsumerWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.support_agent_outlined),
-            title: const Text('Help & Support'),
+            leading: const Icon(Icons.card_giftcard_outlined),
+            title: const Text('Rewards & badges'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => showDialog(
-              context: context,
-              builder: (ctx) => const AlertDialog(
-                title: Text('Help & Support'),
-                content: Text('Write to support@maneyindhamarukatte.in\nWe reply within 24 hours.'),
-              ),
-            ),
+            onTap: () => context.push('/rewards'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.support_agent_outlined),
+            title: const Text('Help assistant'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/assistant'),
           ),
           ListTile(
             leading: const Icon(Icons.logout),
@@ -490,6 +573,126 @@ class _CustomerProfile extends ConsumerWidget {
             },
           ),
         ])),
+      ]),
+    );
+  }
+}
+
+
+class _QuickAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _QuickAction({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) => Material(
+        color: MMColors.blush,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(children: [
+              Icon(icon, color: MMColors.clay, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(label,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              ),
+            ]),
+          ),
+        ),
+      );
+}
+
+class _FilterSheet extends StatefulWidget {
+  final ShopFilters initial;
+  const _FilterSheet({required this.initial});
+  @override
+  State<_FilterSheet> createState() => _FilterSheetState();
+}
+
+class _FilterSheetState extends State<_FilterSheet> {
+  late ShopFilters f = widget.initial;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPos = f.pos != null;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Text('Filter shops', style: serif(22)),
+        const SizedBox(height: 14),
+        Text('Minimum rating', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        Wrap(spacing: 8, children: [
+          for (final r in const [0, 3, 4, 5])
+            ChoiceChip(
+              label: Text(r == 0 ? 'Any' : '$r★ & up'),
+              selected: f.minRating == r.toDouble(),
+              onSelected: (_) => setState(() => f = f.copyWith(minRating: r.toDouble())),
+            ),
+        ]),
+        const SizedBox(height: 12),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Open now'),
+          value: f.openNow,
+          onChanged: (v) => setState(() => f = f.copyWith(openNow: v)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Shops with a video'),
+          value: f.hasVideo,
+          onChanged: (v) => setState(() => f = f.copyWith(hasVideo: v)),
+        ),
+        const SizedBox(height: 4),
+        Text('Sort by', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        Wrap(spacing: 8, children: [
+          if (hasPos)
+            ChoiceChip(
+              label: const Text('Nearest'),
+              selected: f.sort == 'nearest',
+              onSelected: (_) => setState(() => f = f.copyWith(sort: 'nearest')),
+            ),
+          ChoiceChip(
+            label: const Text('Top rated'),
+            selected: f.sort == 'rating',
+            onSelected: (_) => setState(() => f = f.copyWith(sort: 'rating')),
+          ),
+          ChoiceChip(
+            label: const Text('Newest'),
+            selected: f.sort == 'newest',
+            onSelected: (_) => setState(() => f = f.copyWith(sort: 'newest')),
+          ),
+        ]),
+        if (hasPos) ...[
+          const SizedBox(height: 12),
+          Text('Within ${f.radiusKm.round()} km', style: Theme.of(context).textTheme.titleSmall),
+          Slider(
+            min: 2, max: 50, divisions: 24,
+            value: f.radiusKm.clamp(2, 50).toDouble(),
+            label: '${f.radiusKm.round()} km',
+            onChanged: (v) => setState(() => f = f.copyWith(radiusKm: v)),
+          ),
+        ] else
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('Tap "Near me" to also sort by distance.', style: Theme.of(context).textTheme.bodySmall),
+          ),
+        const SizedBox(height: 16),
+        Row(children: [
+          TextButton(
+            onPressed: () => setState(() => f = ShopFilters(pos: f.pos, sort: f.pos == null ? 'rating' : 'nearest', radiusKm: f.radiusKm)),
+            child: const Text('Clear'),
+          ),
+          const Spacer(),
+          FilledButton(onPressed: () => Navigator.pop(context, f), child: const Text('Show shops')),
+        ]),
       ]),
     );
   }

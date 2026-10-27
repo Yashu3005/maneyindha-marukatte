@@ -6,12 +6,14 @@ const reviewController = require('../controllers/review.controller');
 
 router.get('/product/:productId', reviewController.listForProduct);
 router.get('/business/:businessId', reviewController.listForBusiness);
+// What this customer can rate now (items from delivered orders not yet rated).
+router.get('/to-rate', requireAuth, reviewController.toRate);
 
 router.post('/',
   requireAuth, requireRole('customer', 'entrepreneur'),
   validate(Joi.object({
     productId: Joi.string().hex().length(24).required(),
-    orderId: Joi.string().hex().length(24),
+    orderId: Joi.string().hex().length(24).required(),
     rating: Joi.number().integer().min(1).max(5).required(),
     comment: Joi.string().max(1000).allow(''),
     images: Joi.array().items(Joi.string().uri()).max(5),

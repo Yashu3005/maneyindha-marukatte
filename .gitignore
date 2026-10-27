@@ -28,3 +28,6 @@ frontend/android/.gradle/
 # Vercel CLI link files (never commit)
 .vercel/
 backend/.vercel/
+
+# Data-reset backups hold personal data
+backend/backups/

@@ -68,6 +68,10 @@ exports.create = async (req, res, next) => {
     // Entrepreneurs may only add products to their own business.
     const business = await Business.findOne({ _id: req.body.business, owner: req.user.id });
     if (!business) throw new AppError('Business not found or not owned by you', 403);
+    // Selling starts only after the admin has approved the shop.
+    if (business.verification?.status !== 'approved') {
+      throw new AppError('You can add products once your shop has been approved', 403, 'BUSINESS_NOT_APPROVED');
+    }
     // Whitelist fields — client must not set rating, isActive, deletedAt, etc.
     const data = {};
     for (const key of CREATE_FIELDS) if (req.body[key] !== undefined) data[key] = req.body[key];

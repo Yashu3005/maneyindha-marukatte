@@ -87,10 +87,11 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     }
   }
 
-  Future<void> _applyCoupon() async {
-    if (_coupon.text.trim().isEmpty) return;
+  Future<void> _applyCoupon([String? code]) async {
+    final value = (code ?? _coupon.text).trim();
+    if (value.isEmpty) return;
     try {
-      await ApiClient.dio.post('/cart/coupon', data: {'code': _coupon.text.trim()});
+      await ApiClient.dio.post('/cart/coupon', data: {'code': value});
       ref.invalidate(cartProvider);
       _toast('Coupon applied');
     } catch (e) {
@@ -237,9 +238,10 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          FilledButton.tonal(onPressed: _applyCoupon, child: const Text('Apply')),
+                          FilledButton.tonal(onPressed: () => _applyCoupon(), child: const Text('Apply')),
                         ]),
                       ),
+                      _RewardChips(onApply: _applyCoupon),
                       SoftCard(
                         child: Column(children: [
                           _row('Subtotal', rupees(totals['subtotal'])),
@@ -297,6 +299,31 @@ class _CartScreenState extends ConsumerState<CartScreen> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [Text(label, style: style), Text(value, style: style)]),
+    );
+  }
+}
+
+
+/// Reward coupons this customer can use right now (from /rewards/me). Tapping one applies it.
+class _RewardChips extends ConsumerWidget {
+  final Future<void> Function([String? code]) onApply;
+  const _RewardChips({required this.onApply});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final list = (ref.watch(rewardsProvider).valueOrNull?['coupons'] as List?) ?? const [];
+    final usable = list.cast<Map>().where((c) => c['status'] == 'available').toList();
+    if (usable.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Wrap(spacing: 8, runSpacing: 4, children: [
+        for (final c in usable)
+          ActionChip(
+            avatar: const Icon(Icons.card_giftcard, size: 16, color: MMColors.clay),
+            label: Text('${c['code']} · ${c['description'] ?? ''}'),
+            onPressed: () => onApply(c['code'].toString()),
+          ),
+      ]),
     );
   }
 }

@@ -6,15 +6,17 @@ import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
+import 'admin_dashboard.dart';
 
-class AdminScreen extends ConsumerStatefulWidget {
-  const AdminScreen({super.key});
+/// Applications tab: documents + approve/reject. Only submitted (in_review) applications can be approved.
+class ApplicationsTab extends ConsumerStatefulWidget {
+  const ApplicationsTab({super.key});
   @override
-  ConsumerState<AdminScreen> createState() => _AdminScreenState();
+  ConsumerState<ApplicationsTab> createState() => _ApplicationsTabState();
 }
 
-class _AdminScreenState extends ConsumerState<AdminScreen> {
-  String _status = 'approved';
+class _ApplicationsTabState extends ConsumerState<ApplicationsTab> {
+  String _status = 'in_review';
 
   Future<void> _review(String businessId, String action) async {
     String? reason;
@@ -39,6 +41,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
       await ApiClient.dio.post('/admin/verifications/$businessId',
           data: {'action': action, if (reason != null) 'reason': reason});
       ref.invalidate(adminBusinessesProvider);
+      ref.invalidate(adminStatsProvider);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(action == 'approve' ? 'Approved' : 'Rejected')));
@@ -102,43 +105,15 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
-    if (!auth.isAdmin) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Admin')),
-        body: Center(
-          child: FilledButton(
-            onPressed: () => context.go('/login'),
-            child: const Text('Sign in as admin'),
-          ),
-        ),
-      );
-    }
-
     final businesses = ref.watch(adminBusinessesProvider(_status));
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Entrepreneurs'),
-        actions: [
-          IconButton(
-            tooltip: 'Sign out',
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              ref.read(authProvider.notifier).logout();
-              context.go('/');
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Column(children: [
+    return Column(children: [
         Padding(
           padding: const EdgeInsets.all(16),
           child: SegmentedButton<String>(
             segments: const [
+              ButtonSegment(value: 'in_review', label: Text('Submitted')),
               ButtonSegment(value: 'approved', label: Text('Verified')),
-              ButtonSegment(value: 'in_review', label: Text('In review')),
-              ButtonSegment(value: 'pending', label: Text('Pending')),
+              ButtonSegment(value: 'pending', label: Text('Not submitted')),
               ButtonSegment(value: 'rejected', label: Text('Rejected')),
             ],
             selected: {_status},
@@ -165,8 +140,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                           final owner = (b['owner'] as Map?) ?? {};
                           final rating = (b['rating'] as Map?) ?? {};
                           final isApproved = _status == 'approved';
-                          final needsAction =
-                              _status == 'pending' || _status == 'in_review';
+                          final needsAction = _status == 'in_review';
                           return Card(
                             child: ListTile(
                               leading: ClipRRect(
@@ -204,6 +178,8 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                                         child: const Text('Reject'),
                                       ),
                                     ])
+                                  : _status == 'pending'
+                                  ? const Chip(label: Text('Waiting for documents'))
                                   : (isApproved
                                       ? Chip(
                                           label: Text(
@@ -221,7 +197,65 @@ class _AdminScreenState extends ConsumerState<AdminScreen> {
                   ),
           ),
         ),
-      ]),
+    ]);
+  }
+}
+
+/// Admin console: overview statistics, applications, and members. Only the one configured administrator gets in.
+class AdminScreen extends ConsumerWidget {
+  const AdminScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    if (!auth.isLoggedIn || !auth.isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Admin')),
+        body: Center(
+          child: FilledButton(
+            onPressed: () => context.go('/admin/login'),
+            child: const Text('Administrator sign in'),
+          ),
+        ),
+      );
+    }
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Administrator'),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              icon: const Icon(Icons.refresh),
+              onPressed: () {
+                ref.invalidate(adminStatsProvider);
+                ref.invalidate(adminBusinessesProvider);
+                ref.invalidate(adminUsersProvider);
+              },
+            ),
+            IconButton(
+              tooltip: 'Sign out',
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await ref.read(authProvider.notifier).logout();
+                if (context.mounted) context.go('/');
+              },
+            ),
+            const SizedBox(width: 8),
+          ],
+          bottom: const TabBar(tabs: [
+            Tab(text: 'Overview'),
+            Tab(text: 'Applications'),
+            Tab(text: 'Members'),
+          ]),
+        ),
+        body: const TabBarView(children: [
+          AdminOverviewTab(),
+          ApplicationsTab(),
+          AdminMembersTab(),
+        ]),
+      ),
     );
   }
 }

@@ -43,6 +43,13 @@ const businessSchema = new mongoose.Schema(
       reviewedAt: Date,
       rejectionReason: String,
     },
+    // "Story" video the owner shows customers when they open the shop (hosted on Cloudinary; uploaded directly from the browser).
+    promoVideo: {
+      publicId: String, url: String, posterUrl: String,
+      duration: Number, bytes: Number, format: String,
+      title: { type: String, maxlength: 80 }, caption: { type: String, maxlength: 240 },
+      uploadedAt: Date,
+    },
     rating: { avg: { type: Number, default: 0 }, count: { type: Number, default: 0 } },
     followerCount: { type: Number, default: 0 },
     isOpen: { type: Boolean, default: true },

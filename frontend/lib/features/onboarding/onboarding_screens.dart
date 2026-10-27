@@ -103,12 +103,8 @@ class CreamButton extends StatelessWidget {
   }
 }
 
-Widget wordmark({double size = 30, Color color = Colors.white}) => Column(children: [
-      MMLogo(size: size * 2.6),
-      const SizedBox(height: 10),
-      Text('MANEYINDHA', style: serif(size, color: color)),
-      Text('MARUKATTE', style: serif(size, color: color)),
-    ]);
+/// The logo already carries the shop's name, so this is just the logo at a size matched to the old text mark.
+Widget wordmark({double size = 30, Color color = Colors.white}) => MMLogo(size: size * 5.2);
 
 // ---------------- 1. Landing ----------------
 class LandingScreen extends ConsumerWidget {
@@ -120,15 +116,8 @@ class LandingScreen extends ConsumerWidget {
     return OliveScaffold(
       showBack: false,
       child: Column(children: [
-        const SizedBox(height: 40),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: MMColors.cream,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: wordmark(color: MMColors.deepOlive),
-        ),
+        const SizedBox(height: 24),
+        const AnimatedBrandLogo(size: 230),
         const SizedBox(height: 12),
         Text('Made nearby, with love',
             style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
@@ -415,8 +404,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Center(child: Text('Create your Profile', style: serif(24, color: MMColors.cream))),
         const SizedBox(height: 20),
-        const Center(
+        Center(
           child: UserAvatar(
+            name: _name.text,
             radius: 44,
             backgroundColor: MMColors.deepOlive,
             iconColor: MMColors.cream,
@@ -424,7 +414,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         ),
         const SizedBox(height: 10),
         Center(
-          child: Text('A profile photo is optional — you can add one later.',
+          child: Text('Your profile picture is made from your name. Entrepreneurs can add their own photo from their profile.',
               textAlign: TextAlign.center,
               style: serif(13, weight: FontWeight.w400, color: MMColors.cream)),
         ),

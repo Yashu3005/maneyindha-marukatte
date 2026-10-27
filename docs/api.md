@@ -16,15 +16,18 @@ Status codes used: 400 bad input/credentials · 401 not signed in · 403 wrong r
 |---|---|
 | Auth | `POST /auth/otp/send`, `/auth/otp/verify`, `/auth/refresh`, `/auth/logout`, `/auth/logout-all`, `/auth/register`, `/auth/login`, `/auth/firebase-exchange` |
 | Users | `GET/PATCH /users/me`, `POST/DELETE /users/me/avatar`, `POST /users/me/role`, `/users/me/credentials`, `/users/me/security-questions` |
-| Businesses | `GET /businesses`, `/businesses/nearby`, `/businesses/mine`, `/businesses/:id`; `POST /businesses`; `PATCH /businesses/:id/location`; `POST /businesses/:id/documents` (private upload), `GET /businesses/:id/documents`, `DELETE /businesses/:id/documents/:docId`, `POST /businesses/:id/verification-documents` (submit) |
+| Businesses | `GET /businesses` (filters: `category`, `q`, `minRating`, `openNow`, `hasVideo`, `sort=rating|newest|name`), `/businesses/nearby` (`lat`,`lng`,`radiusKm`, same filters), `/businesses/mine`, `/businesses/:id`; `POST /businesses`; `PATCH /businesses/:id/location`; `POST /businesses/:id/documents` (private upload), `GET /businesses/:id/documents`, `DELETE /businesses/:id/documents/:docId`, `POST /businesses/:id/verification-documents` (submit) |
 | Products | `GET /products`, `/products/:id`; `POST /products`; `DELETE /products/:id` |
 | Cart / wishlist / reviews | `/cart`, `/cart/items`, `/cart/coupon`, `/wishlist/*`, `/reviews/*` |
 | Orders | `POST /orders` (`paymentMethod: cod|razorpay`), `GET /orders/mine`, `PATCH /orders/:id/status` |
 | Payments | `POST /payments/razorpay/order`, `/payments/razorpay/verify`, `/payments/razorpay/webhook`; `GET /payments/status/:orderId` |
-| AI | `POST /ai/product-description` |
+| AI | `POST /ai/product-description` (entrepreneurs), `POST /ai/assistant` (customer help; real AI only, 503 `AI_NOT_CONFIGURED` if no key) |
+| Rewards | `GET /rewards/me` (badge, progress, reward coupons with status) |
+| Ratings | `POST /reviews` (needs a delivered order: `orderId` + `productId`), `GET /reviews/to-rate`, `GET /reviews/business/:id`, `GET /businesses/:id/rating-summary` |
+| Shop video | `POST /businesses/:id/promo-video/signature`, `POST /businesses/:id/promo-video`, `DELETE /businesses/:id/promo-video` (owner of an approved shop) |
 | App | `GET /app/download`, `GET /app/download-qr.png` |
 | Media | `GET /images` |
-| Admin | `GET /admin/verifications`, `POST /admin/verifications/:businessId` |
+| Admin (the one configured admin only) | `POST /auth/admin/login`; `GET /admin/stats`, `GET /admin/users`, `PATCH /admin/users/:id/status`, `GET /admin/verifications`, `POST /admin/verifications/:businessId` (approve only from `in_review` with documents on file), `GET /admin/verifications/:businessId/documents/:docId/link`, `DELETE /admin/businesses/:businessId/promo-video` |
 | System | `GET /health` (outside `/api/v1`) |
 
 ## Rate limits

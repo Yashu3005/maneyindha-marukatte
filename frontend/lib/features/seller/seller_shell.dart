@@ -8,6 +8,7 @@ import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
+import 'promo_video_manager.dart';
 
 /// Entrepreneur app: Dashboard · Products · Orders · Earnings · Profile.
 class SellerShell extends ConsumerStatefulWidget {
@@ -21,6 +22,20 @@ class _SellerShellState extends ConsumerState<SellerShell> {
 
   @override
   Widget build(BuildContext context) {
+    // A shop can sell only after an administrator has approved its submitted documents.
+    final mine = ref.watch(myBusinessesProvider).valueOrNull;
+    if (mine != null && mine.isNotEmpty) {
+      final v = (mine.first['verification'] as Map?) ?? const {};
+      final status = v['status']?.toString() ?? 'pending';
+      if (status != 'approved') {
+        return _ApprovalGate(
+          shop: mine.first,
+          shopName: mine.first['name']?.toString() ?? 'Your shop',
+          status: status,
+          reason: v['rejectionReason']?.toString(),
+        );
+      }
+    }
     return Scaffold(
       body: IndexedStack(index: _index, children: const [
         _DashboardTab(),
@@ -39,6 +54,94 @@ class _SellerShellState extends ConsumerState<SellerShell> {
           NavigationDestination(icon: Icon(Icons.show_chart), label: 'Earnings'),
           NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
         ],
+      ),
+    );
+  }
+}
+
+/// Shown instead of the seller tools until the administrator approves the application.
+class _ApprovalGate extends ConsumerWidget {
+  final String shopName;
+  final String status; // pending (not submitted) | in_review | rejected
+  final String? reason;
+  final Map<String, dynamic> shop;
+  const _ApprovalGate({required this.shop, required this.shopName, required this.status, this.reason});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final waiting = status == 'in_review';
+    final rejected = status == 'rejected';
+    final title = waiting
+        ? 'Waiting for approval'
+        : rejected
+            ? 'Application not approved'
+            : 'Finish your application';
+    final body = waiting
+        ? 'Thank you! Our team is checking the documents for $shopName. '
+            'You can start selling as soon as it is approved. We will notify you here.'
+        : rejected
+            ? 'Your application for $shopName was not approved.'
+                '${(reason ?? '').isNotEmpty ? '\n\nReason: $reason' : ''}'
+                '\n\nYou can fix the documents and submit again.'
+            : 'Upload your ID proof and business proof and submit them for review. '
+                'Your shop goes live only after an administrator approves it.';
+    return Scaffold(
+      backgroundColor: MMColors.olive,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                CircleAvatar(
+                  radius: 44,
+                  backgroundColor: MMColors.cream,
+                  child: Icon(
+                    waiting ? Icons.hourglass_top : (rejected ? Icons.error_outline : Icons.description_outlined),
+                    size: 44, color: MMColors.deepOlive,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(title, style: serif(24, color: MMColors.cream), textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                Text(body,
+                    textAlign: TextAlign.center,
+                    style: serif(15, weight: FontWeight.w400, color: MMColors.cream)),
+                const SizedBox(height: 28),
+                if (!waiting)
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: MMColors.cream, foregroundColor: MMColors.deepOlive),
+                    onPressed: () {
+                      // The documents step reads the shop from this onboarding state.
+                      ref.read(sellerOnboardingProvider.notifier).state = {
+                        'businessId': shop['_id'],
+                        'businessName': shop['name'],
+                        'address': (shop['address'] as Map?)?['line1'],
+                      };
+                      context.go('/seller/onboarding/documents');
+                    },
+                    child: Text(rejected ? 'Update documents' : 'Upload documents'),
+                  ),
+                TextButton(
+                  style: TextButton.styleFrom(foregroundColor: MMColors.cream),
+                  onPressed: () => ref.invalidate(myBusinessesProvider),
+                  child: const Text('Refresh status'),
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(foregroundColor: MMColors.cream),
+                  onPressed: () async {
+                    await ref.read(authProvider.notifier).switchRole('customer');
+                    ref.invalidate(ordersProvider);
+                    ref.invalidate(cartProvider);
+                    if (context.mounted) context.go('/app');
+                  },
+                  child: const Text('Browse as a customer'),
+                ),
+              ]),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -96,6 +199,7 @@ class _DashboardTab extends ConsumerWidget {
           Row(children: [
             UserAvatar(
               url: auth.user?['avatarUrl']?.toString(),
+              name: auth.name,
               radius: 26,
               backgroundColor: MMColors.cream,
             ),
@@ -631,6 +735,7 @@ class _SellerProfileTab extends ConsumerWidget {
         child: ListView(padding: const EdgeInsets.all(16), children: [
           Center(child: UserAvatar(
             url: auth.user?['avatarUrl']?.toString(),
+            name: auth.name,
             radius: 44,
             backgroundColor: MMColors.cream,
           )),
@@ -674,6 +779,14 @@ class _SellerProfileTab extends ConsumerWidget {
                   );
                 },
               ),
+            ),
+            ListTile(
+              title: const Text('Shop video'),
+              subtitle: const Text('Show customers how you make your products'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: shops.asData?.value.isNotEmpty == true
+                  ? () => showPromoVideoSheet(context, shops.asData!.value.first)
+                  : null,
             ),
             ListTile(
               title: const Text('Bank Details'),

@@ -97,3 +97,32 @@ The "Upload Documents" step of entrepreneur onboarding never uploaded the owner'
 - The optional "business profile photo" step was removed from document upload (it was a stock photo). A real shop photo/logo upload is a separate feature.
 - Login, register and seller dashboard screens still use the base theme only.
 - Applications already submitted with the old stock-photo "documents" keep those legacy entries (they have a `url`, no `publicId`); admins cannot open them. Ask those applicants to re-upload (reject with a reason, then they can upload again).
+
+---
+
+# Addendum: twelve improvements (data reset, avatars, approval gate, admin, AI help, nearby + filters, shop video, rewards, badges, ratings, logo, splash)
+
+Status key: **PASS** = automated test passed (stubbed database/providers) · **NOT TESTED** = not exercised here.
+
+| # | Request | What was built | Status |
+|---|---|---|---|
+| 1 | Delete current customer/entrepreneur data | `npm run reset:data` — dry run by default; `--apply --confirm=<dbname>` plus typed `DELETE` on a terminal; JSONL backup first (no password hashes); keeps the admin; never drops collections/indexes; optional `--purge-uploads`. **Not run by the assistant.** | Plan/guards **PASS** (12 tests) · run against a real DB NOT TESTED |
+| 2 | Default avatar for customers, custom for entrepreneurs | Customers always see an initial-on-brand-colour avatar; photo upload route is entrepreneur-only (server-enforced). | Server rule **PASS** · Flutter NOT TESTED |
+| 3 | Documents must be valid; wait for admin approval | Approve only from `in_review` and only with ID + business proof actually uploaded; unapproved shops cannot create products; Flutter shows a waiting/rejected/finish-application screen instead of the seller tools, and "Continue" on the status screen only appears once approved. | Server **PASS** · Flutter NOT TESTED |
+| 4 | Admin page, statistics, one admin | `POST /auth/admin/login`; credentials only in env (`ADMIN_USERNAME`, scrypt `ADMIN_PASSWORD_HASH`); no admin sign-up path; any other admin-role account is demoted. `GET /admin/stats` (live aggregates, 14-day series), members list + suspend/restore. Flutter: login, Overview/Applications/Members tabs. | Server **PASS** (33 tests) · aggregations on real MongoDB and Flutter NOT TESTED |
+| 5 | AI help assistant | `POST /ai/assistant` grounded in approved shops/products and the customer's own order status; ids in the answer are restricted to real records; returns 503 `AI_NOT_CONFIGURED` when no AI key (no canned replies). Flutter chat screen with product/shop cards. | Server **PASS** (11 tests, stub provider) · real AI answers and Flutter NOT TESTED |
+| 6 | Nearest shops + filters | `/businesses` and `/businesses/nearby`: category, search, min rating, open now, has video, sort rating/newest/name/nearest, radius. Flutter filter sheet, chips, "Near me". | Server **PASS** (19 tests) · `$near`/`$geoWithin` on real MongoDB and Flutter NOT TESTED |
+| 7 | Video ad on a shop page | Owner uploads straight to Cloudinary with a server-signed request (Vercel body limit), server re-checks size ≤ 40 MB, ≤ 60 s, mp4/mov/webm before it goes live; admin can take it down. Flutter: autoplay muted, loop, sound/close buttons; upload sheet in seller profile. | Server **PASS** (22 tests) · real Cloudinary, CORS, playback NOT TESTED |
+| 8 | Rewards / coupons | Programme: WELCOME10 (first order), REGULAR5, LOYAL10, CHAMPION100 — auto-created, eligibility enforced at checkout from delivered orders (a locked code cannot be typed in). `GET /rewards/me`; Flutter rewards screen, home chip, cart reward chips. | Server **PASS** (32 tests) · Flutter NOT TESTED |
+| 9 | Badges by purchase frequency | New · Explorer (1) · Regular (3) · Loyal Patron (6) · Champion (12) from DELIVERED orders, plus a 30/90-day frequency label. | **PASS** (server) · Flutter NOT TESTED |
+| 10 | Ratings of the business | Rating requires a delivered order containing that product; cannot rate your own shop; `GET /reviews/to-rate`, `/businesses/:id/rating-summary` (average + 1–5 spread). Flutter: summary card, reviews list, "Rate your order" on delivered orders. | Server **PASS** · Flutter NOT TESTED |
+| 11 | Logo + same logo in emails | New logo assets/icons/favicon; OTP email shows the logo from `APP_URL/brand/logo-email.png` (or `EMAIL_LOGO_URL`). | HTML **PASS** (12 tests) · rendering in Gmail NOT TESTED; shows only after the new frontend is live at `APP_URL` |
+| 12 | Animation on opening the site | `index.html` splash: logo fades/scales in, holds at least 1.6 s, fades out on Flutter's first frame (15 s cap; respects reduced motion). | **PASS** in headless Chromium with a simulated first-frame event (opacity 0.20 → 0.87 → 1.00 at 0.1/0.4/1.0 s; removed by 2.4 s) · inside a real Flutter build NOT TESTED |
+
+Totals: 28 backend suites / 481 tests pass; eslint clean.
+
+## Limits
+- No Dart/Flutter SDK here, so **no Flutter code was compiled or run** — only bracket/string checks and manual review. Run `flutter pub get && flutter analyze` first and send me any errors. New package: `video_player ^2.9.2`.
+- The Gmail sender avatar next to an email is controlled by Google/BIMI, not by this app; only the logo inside the email body is ours.
+- Applications that were submitted earlier with stock-photo "documents" cannot be approved; those applicants must upload real documents and resubmit.
+- Cloudinary keeps uploaded files after a database reset unless `--purge-uploads` is used.

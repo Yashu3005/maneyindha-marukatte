@@ -8,7 +8,6 @@ const User = require('../src/models/User');
 const Business = require('../src/models/Business');
 const Product = require('../src/models/Product');
 const Category = require('../src/models/Category');
-const Coupon = require('../src/models/Coupon');
 
 const BLR = (lng, lat) => ({ type: 'Point', coordinates: [lng, lat] });
 const PEXELS = process.env.PEXELS_API_KEY;
@@ -54,21 +53,24 @@ async function img(query, fallbackQuery, seedName, w = 640, h = 420) {
 }
 
 async function run() {
+  // Demo accounts with a known password must never reach a real database.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Refusing to seed demo data when NODE_ENV=production.');
+  }
   await mongoose.connect(process.env.MONGODB_URI);
   console.log('Connected. Seeding' + (PEXELS ? ' with Pexels photos…' : ' with placeholders…'));
 
   const oldShops = await Business.find(
     { slug: { $in: ['ashas-home-bakes', 'kala-crafts', 'ruchi-tiffins'] } }).select('_id');
   await Promise.all([
-    User.deleteMany({ email: { $in: ['admin@mm.dev', 'asha@mm.dev', 'customer@mm.dev'] } }),
+    User.deleteMany({ email: { $in: ['asha@mm.dev', 'customer@mm.dev'] } }),
     Product.deleteMany({ business: { $in: oldShops.map((b) => b._id) } }),
     Business.deleteMany({ slug: { $in: ['ashas-home-bakes', 'kala-crafts', 'ruchi-tiffins'] } }),
-    Coupon.deleteMany({ code: 'WELCOME10' }),
   ]);
 
   const hash = await bcrypt.hash('password123', 12);
-  const [, asha] = await User.create([
-    { name: 'Admin', email: 'admin@mm.dev', passwordHash: hash, role: 'admin', profileComplete: true },
+  // No admin here: the one administrator comes from ADMIN_USERNAME / ADMIN_PASSWORD_HASH (npm run admin:hash).
+  const [asha] = await User.create([
     { name: 'Asha', email: 'asha@mm.dev', passwordHash: hash, role: 'entrepreneur', profileComplete: true },
     { name: 'Priya', email: 'customer@mm.dev', passwordHash: hash, role: 'customer', profileComplete: true },
   ]);
@@ -131,17 +133,13 @@ async function run() {
     console.log('  product:', name);
   }
 
-  await Coupon.create({
-    code: 'WELCOME10', type: 'percent', value: 10, maxDiscount: 100,
-    minOrderAmount: 199, usageLimitPerUser: 1, isActive: true,
-  });
+  // Reward coupons (WELCOME10, REGULAR5, …) are created by the app itself on first use.
 
   console.log(`
 Seed complete.
-  admin@mm.dev / password123      (admin)
   asha@mm.dev / password123       (entrepreneur)
   customer@mm.dev / password123   (customer)
-  Coupon: WELCOME10 (10% off, min ₹199)
+  Admin: set ADMIN_USERNAME + ADMIN_PASSWORD_HASH, then sign in at /admin/login
 `);
   await mongoose.disconnect();
 }

@@ -49,6 +49,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _apply(res.data['data'] as Map<String, dynamic>);
   }
 
+  /// The single administrator signs in with the username and password configured on the server.
+  Future<void> adminLogin(String username, String password) async {
+    final res = await ApiClient.dio
+        .post('/auth/admin/login', data: {'username': username.trim(), 'password': password});
+    await _apply(res.data['data'] as Map<String, dynamic>);
+  }
+
   Future<void> register(String name, String email, String password,
       {String role = 'customer'}) async {
     final res = await ApiClient.dio.post('/auth/register',

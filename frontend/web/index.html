@@ -4,13 +4,6 @@
   <!--
     If you are serving your web app in a path other than the root, change the
     href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
@@ -18,29 +11,69 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Maneyindha Marukatte — home-made treasures from women entrepreneurs near you.">
+  <meta name="theme-color" content="#FFF9B8">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="maneyindha_marukatte">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Maneyindha Marukatte">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
+  <!-- Favicon: the same logo as the app and the sign-in email -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>maneyindha_marukatte</title>
+  <title>Maneyindha Marukatte</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* Opening animation: the logo fades in and settles, exactly the intro the brand video shows.
+       It is plain HTML/CSS so it plays immediately, while the app is still downloading. */
+    html, body { margin: 0; height: 100%; background: #FAF8F1; }
+    #mm-splash {
+      position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center;
+      background: #FAF8F1; transition: opacity .45s ease;
+    }
+    #mm-splash.mm-hide { opacity: 0; pointer-events: none; }
+    #mm-splash img {
+      width: min(62vw, 340px); height: auto; opacity: 0; transform: scale(.94);
+      animation: mm-in .7s cubic-bezier(.22,.61,.36,1) .05s forwards;
+    }
+    @keyframes mm-in { to { opacity: 1; transform: scale(1); } }
+    @media (prefers-reduced-motion: reduce) {
+      #mm-splash img { animation: none; opacity: 1; transform: none; }
+      #mm-splash { transition: none; }
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
-
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+  <div id="mm-splash" aria-hidden="true"><img src="brand/logo.png" alt="Maneyindha Marukatte"></div>
+  <script>
+    // Keep the splash up for at least 1.6 s (so the animation is seen), then fade it out once the app has drawn its
+    // first frame. The engine's 'flutter-first-frame' event is listened for on both window and document; if neither
+    // arrives, the appearance of the Flutter view is used instead, and after 15 s the splash goes regardless.
+    (function () {
+      var splash = document.getElementById('mm-splash');
+      var started = Date.now();
+      var done = false;
+      function hide() {
+        if (done) return; done = true;
+        splash.classList.add('mm-hide');
+        setTimeout(function () { if (splash.parentNode) splash.parentNode.removeChild(splash); }, 600);
+      }
+      function ready() {
+        if (done) return;
+        setTimeout(hide, Math.max(0, 1600 - (Date.now() - started)));
+      }
+      window.addEventListener('flutter-first-frame', ready);
+      document.addEventListener('flutter-first-frame', ready);
+      var poll = setInterval(function () {
+        if (document.querySelector('flutter-view, flt-glass-pane')) { clearInterval(poll); setTimeout(ready, 900); }
+      }, 250);
+      setTimeout(hide, 15000);
+    })();
+  </script>
   <script src="razorpay_bridge.js"></script>
   <script src="flutter_bootstrap.js" async></script>
 </body>

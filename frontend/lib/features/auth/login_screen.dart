@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
+import '../../shared/mm_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -50,8 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('🌸 Maneyindha Marukatte',
-                  style: Theme.of(context).textTheme.headlineSmall),
+              const AnimatedBrandLogo(size: 150),
               const SizedBox(height: 4),
               Text('Made nearby, with love',
                   style: Theme.of(context).textTheme.bodyMedium),

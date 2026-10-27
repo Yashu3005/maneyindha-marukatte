@@ -83,7 +83,15 @@ exports.applyCoupon = async (customerId, code) => {
 
 // Shared validation — also used at checkout so a coupon can't go stale in the cart.
 exports.validateCoupon = async (code, { businessId, subtotal, customerId }) => {
-  const coupon = await Coupon.findOne({ code: code.toUpperCase(), isActive: true });
+  let coupon = await Coupon.findOne({ code: code.toUpperCase(), isActive: true });
+  if (!coupon) {
+    // Reward coupons are created on first use, so a customer can type one before ever opening "My rewards".
+    const rewards = require('./rewards.service');
+    if (rewards.isRewardCode(code)) {
+      await rewards.ensureRewardCoupons();
+      coupon = await Coupon.findOne({ code: code.toUpperCase(), isActive: true });
+    }
+  }
   if (!coupon) throw new AppError('Invalid coupon', 422);
 
   const now = new Date();
@@ -97,6 +105,17 @@ exports.validateCoupon = async (code, { businessId, subtotal, customerId }) => {
   }
   if (coupon.usageLimitTotal && coupon.usedCount >= coupon.usageLimitTotal) {
     throw new AppError('Coupon usage limit reached', 422);
+  }
+  // Reward coupons are for new or regular customers only: judged by orders actually delivered.
+  if (coupon.minDeliveredOrders != null || coupon.maxDeliveredOrders != null) {
+    const delivered = customerId ? await Order.countDocuments({ customer: customerId, status: 'delivered' }) : 0;
+    if (coupon.maxDeliveredOrders != null && delivered > coupon.maxDeliveredOrders) {
+      throw new AppError('This offer is for new customers only', 422, 'COUPON_NOT_ELIGIBLE');
+    }
+    if (coupon.minDeliveredOrders != null && delivered < coupon.minDeliveredOrders) {
+      const need = coupon.minDeliveredOrders - delivered;
+      throw new AppError(`Unlocks after ${need} more delivered order${need === 1 ? '' : 's'}`, 422, 'COUPON_NOT_ELIGIBLE');
+    }
   }
   if (coupon.usageLimitPerUser && customerId) {
     const used = await Order.countDocuments({

@@ -25,3 +25,9 @@ exports.logoutAll = async (req, res, next) => {
 exports.verifyOtp = async (req, res, next) => {
   try { ok(res, await authService.verifyOtp(req.body)); } catch (e) { next(e); }
 };
+exports.adminLogin = async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    ok(res, await require('../services/adminAuth.service').login(req.body));
+  } catch (e) { next(e); }
+};

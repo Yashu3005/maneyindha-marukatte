@@ -14,6 +14,13 @@ const couponSchema = new mongoose.Schema(
     validFrom: Date,
     validUntil: Date,
     isActive: { type: Boolean, default: true },
+    // Shown to customers in "My rewards".
+    title: String,
+    description: String,
+    isReward: { type: Boolean, default: false },
+    // Who may use it, by how many orders they have already had DELIVERED (0..0 = brand-new customers only).
+    minDeliveredOrders: Number,
+    maxDeliveredOrders: Number,
   },
   { timestamps: true }
 );

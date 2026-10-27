@@ -20,3 +20,22 @@ exports.documentLink = async (req, res, next) => {
     ok(res, await docs.adminDocumentLink(req.params.businessId, req.params.docId));
   } catch (e) { next(e); }
 };
+
+exports.stats = async (_req, res, next) => {
+  try { res.set('Cache-Control', 'no-store'); ok(res, await adminService.getStats()); } catch (e) { next(e); }
+};
+
+exports.listUsers = async (req, res, next) => {
+  try {
+    const { items, meta } = await adminService.listUsers(req.query);
+    ok(res, items, meta);
+  } catch (e) { next(e); }
+};
+
+exports.setUserStatus = async (req, res, next) => {
+  try { ok(res, await adminService.setUserActive(req.params.id, req.body.isActive)); } catch (e) { next(e); }
+};
+
+exports.removePromoVideo = async (req, res, next) => {
+  try { ok(res, await require('../services/promoVideo.service').adminRemoveVideo(req.params.businessId)); } catch (e) { next(e); }
+};

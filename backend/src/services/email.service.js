@@ -27,13 +27,31 @@ function getClient() {
 // Test seam — lets tests inject a stand-in client without touching the network.
 exports._setClient = (c) => { client = c; };
 
+// The logo in emails is the SAME file the website uses (frontend/web/brand/logo-email.png, served at
+// <site>/brand/logo-email.png). Email clients need an absolute https URL and block inline/base64 images, so it
+// is referenced by URL. Set APP_URL to the public website address (or EMAIL_LOGO_URL to a full image URL).
+function logoUrl(env = process.env) {
+  const safe = (u) => /^https:\/\/[^\s"'<>]+$/.test(u); // goes into an HTML attribute: no quotes, spaces or brackets
+  if (env.EMAIL_LOGO_URL && safe(env.EMAIL_LOGO_URL)) return env.EMAIL_LOGO_URL;
+  const publicOrigin = (o) => safe(o) && !/localhost|127\.0\.0\.1/.test(o);
+  const base = (env.APP_URL && publicOrigin(env.APP_URL.trim()) ? env.APP_URL.trim()
+    : String(env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).find(publicOrigin));
+  return base ? `${base.replace(/\/+$/, '')}/brand/logo-email.png` : null;
+}
+exports.logoUrl = logoUrl;
+exports._otpHtml = (code, minutes) => otpHtml(code, minutes);
+
 function otpHtml(code, minutes) {
+  const logo = logoUrl();
+  const header = logo
+    ? `<tr><td align="center" style="padding-bottom:6px"><img src="${logo}" width="112" height="112" alt="Maneyindha Marukatte" style="display:block;border:0;outline:none;width:112px;height:112px"></td></tr>`
+    : '';
   // Table layout + inline styles for broad email-client support; max-width keeps it mobile friendly.
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#f4f1ea;font-family:Arial,Helvetica,sans-serif;color:#2f3a1f">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1ea;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;padding:28px">
-<tr><td style="font-size:20px;font-weight:bold;color:#4a5a2a;padding-bottom:8px">Maneyindha Marukatte</td></tr>
+${header}<tr><td align="center" style="font-size:20px;font-weight:bold;color:#4a5a2a;padding-bottom:12px">Maneyindha Marukatte</td></tr>
 <tr><td style="font-size:16px;padding-bottom:16px">Use this code to sign in:</td></tr>
 <tr><td align="center" style="padding:12px 0 20px"><span style="display:inline-block;font-size:34px;letter-spacing:10px;font-weight:bold;background:#eef0e4;border-radius:12px;padding:14px 22px">${code}</span></td></tr>
 <tr><td style="font-size:14px;line-height:1.5;color:#555">This code expires in ${minutes} minutes and can be used once.<br>Never share it with anyone &mdash; Maneyindha Marukatte will never ask for it.<br>If you didn&rsquo;t request it, you can safely ignore this email.</td></tr>

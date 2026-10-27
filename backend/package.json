@@ -8,7 +8,9 @@
     "start": "node src/server.js",
     "test": "jest --runInBand",
     "lint": "eslint src/",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "admin:hash": "node scripts/hash-admin-password.js",
+    "reset:data": "node scripts/reset-data.js"
   },
   "engines": {
     "node": ">=20"

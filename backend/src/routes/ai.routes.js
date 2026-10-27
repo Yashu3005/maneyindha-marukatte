@@ -2,7 +2,7 @@ const router = require('express').Router();
 const rateLimit = require('express-rate-limit');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-const { productDescriptionSchema } = require('../validators/ai.validator');
+const { productDescriptionSchema, assistantSchema } = require('../validators/ai.validator');
 const ctrl = require('../controllers/ai.controller');
 
 // AI calls cost money: limit per signed-in user (in-memory per instance; use a shared store behind several instances).
@@ -14,5 +14,8 @@ const aiLimiter = rateLimit({
 
 router.post('/product-description', requireAuth, requireRole('entrepreneur'), aiLimiter,
   validate(productDescriptionSchema), ctrl.productDescription);
+
+// Customer help assistant (any signed-in member). Real AI only: with no provider configured it answers 503, never a canned reply.
+router.post('/assistant', requireAuth, aiLimiter, validate(assistantSchema), ctrl.assistant);
 
 module.exports = router;

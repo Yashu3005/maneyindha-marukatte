@@ -4,14 +4,32 @@
   "start_url": ".",
   "display": "standalone",
   "background_color": "#FAF8F1",
-  "theme_color": "#5F7036",
-  "description": "Empowering home-based women entrepreneurs — from home to market.",
+  "theme_color": "#FFF9B8",
+  "description": "Empowering home-based women entrepreneurs \u2014 from home to market.",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [
-    { "src": "icons/Icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/Icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/Icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/Icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/Icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/Icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/Icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/Icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

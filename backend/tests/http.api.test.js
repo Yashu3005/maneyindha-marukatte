@@ -1,7 +1,8 @@
 // HTTP-level tests against the real Express app (routing, auth, RBAC, validation,
 // error handling). No database is attached: mongoose is told to fail fast, and every
 // assertion here is on behaviour that must happen BEFORE any DB access.
-const { bearer, tokenFor, oid } = require('./helpers');
+const { bearer, tokenFor, oid, installAdmin, adminBearer } = require('./helpers');
+const User = require('../src/models/User');
 const request = require('supertest');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
@@ -210,7 +211,8 @@ describe('input validation (422) happens before any DB access', () => {
     expect((await request(app).post(`${api}/wishlist/businesses`).set(bearer('customer')).send({})).status).toBe(422);
   });
   test('admin review validation', async () => {
-    const h = bearer('admin');
+    installAdmin(User);
+    const h = adminBearer();
     expect((await request(app).post(`${api}/admin/verifications/${oid()}`).set(h).send({ action: 'nuke' })).status).toBe(422);
     expect((await request(app).get(`${api}/admin/verifications?status=bogus`).set(h)).status).toBe(422);
     expect((await request(app).get(`${api}/admin/verifications?limit=100000`).set(h)).status).toBe(422);

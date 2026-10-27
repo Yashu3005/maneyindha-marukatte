@@ -5,7 +5,8 @@ const { v2: cloudinary } = require('cloudinary');
 const Business = require('../src/models/Business');
 const docs = require('../src/services/verificationDoc.service');
 const logger = require('../src/utils/logger');
-const { oid, bearer } = require('./helpers');
+const { oid, bearer, installAdmin, adminBearer } = require('./helpers');
+const User = require('../src/models/User');
 
 mongoose.set('bufferCommands', false);
 const app = require('../src/app');
@@ -195,7 +196,10 @@ describe('submit', () => {
 });
 
 describe('admin link', () => {
-  const link = (role, docId) => request(app).get(`${api}/admin/verifications/${bizId}/documents/${docId}/link`).set(bearer(role));
+  const link = (role, docId) => {
+    installAdmin(User);
+    return request(app).get(`${api}/admin/verifications/${bizId}/documents/${docId}/link`).set(role === 'admin' ? adminBearer() : bearer(role));
+  };
   test('admin gets a short-lived signed link; nobody else does', async () => {
     await up(PDF, { type: 'business_proof' });
     const docId = String(biz.verification.documents[0]._id);

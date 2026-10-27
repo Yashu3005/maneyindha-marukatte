@@ -18,7 +18,11 @@ exports.listForBusiness = async (req, res, next) => {
   try {
     const Review = require('../models/Review');
     const items = await Review.find({ business: req.params.businessId, deletedAt: null })
-      .sort('-createdAt').limit(50).populate('customer', 'name avatarUrl');
+      .sort('-createdAt').limit(50).populate('customer', 'name avatarUrl').populate('product', 'name');
     ok(res, items);
   } catch (e) { next(e); }
+};
+
+exports.toRate = async (req, res, next) => {
+  try { ok(res, await reviewService.toRate(req.user.id)); } catch (e) { next(e); }
 };

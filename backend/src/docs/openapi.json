@@ -327,6 +327,60 @@
               "type": "integer",
               "default": 20
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Shop name contains"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Category id or name"
+          },
+          {
+            "name": "minRating",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "description": "Only shops with at least one review and an average ≥ this"
+          },
+          {
+            "name": "openNow",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "hasVideo",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Only shops with a promo video"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "rating",
+                "newest",
+                "name"
+              ]
+            },
+            "description": "Omit for nearest first. Otherwise shops within radiusKm ordered by this; distanceKm is still returned."
           }
         ],
         "responses": {
@@ -390,6 +444,47 @@
         "summary": "List approved shops (coarsened public location)",
         "parameters": [
           {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Shop name contains"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Category id or name"
+          },
+          {
+            "name": "minRating",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 5
+            },
+            "description": "Only shops with at least one review and an average ≥ this"
+          },
+          {
+            "name": "openNow",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "hasVideo",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Only shops with a promo video"
+          },
+          {
             "name": "page",
             "in": "query",
             "schema": {
@@ -400,16 +495,29 @@
             "name": "limit",
             "in": "query",
             "schema": {
-              "type": "integer",
-              "maximum": 50
+              "type": "integer"
             }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "rating",
+                "newest",
+                "name"
+              ]
+            },
+            "description": "Default: rating"
           }
         ],
         "responses": {
           "200": {
             "description": "Shops"
           }
-        }
+        },
+        "description": "Approved shops only. Public shape: no documents, no exact location."
       }
     },
     "/products": {
@@ -481,7 +589,8 @@
           "403": {
             "description": "Not your business"
           }
-        }
+        },
+        "description": "Only for an APPROVED shop (403 BUSINESS_NOT_APPROVED otherwise)."
       }
     },
     "/products/{id}": {
@@ -826,7 +935,8 @@
           "409": {
             "description": "Duplicate review"
           }
-        }
+        },
+        "description": "Ratings come only from real buyers: `orderId` is required and must be a DELIVERED order of yours containing the product; you cannot rate your own products."
       }
     },
     "/reviews/product/{productId}": {
@@ -1033,7 +1143,8 @@
           "422": {
             "description": "Already reviewed / missing reason"
           }
-        }
+        },
+        "description": "Approve only works on an application that has been submitted (in_review) with ID proof and business proof on file; otherwise 422 NOT_SUBMITTED / DOCUMENTS_MISSING."
       }
     },
     "/health": {
@@ -2342,6 +2453,462 @@
           },
           "403": {
             "description": "Admins only"
+          }
+        }
+      }
+    },
+    "/auth/admin/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Administrator sign-in (the only way to become admin)",
+        "description": "Credentials come from server configuration (`ADMIN_USERNAME` and a salted scrypt `ADMIN_PASSWORD_HASH` made with `npm run admin:hash`); there is no sign-up, OTP or profile call that can create an admin. Signing in demotes any other account that carries an admin role.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ user, accessToken, refreshToken }"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "409": {
+            "description": "ADMIN_USERNAME is held by a normal member"
+          },
+          "429": {
+            "description": "Too many attempts (10 per 15 min per IP)"
+          },
+          "503": {
+            "description": "ADMIN_NOT_CONFIGURED"
+          }
+        }
+      }
+    },
+    "/businesses/{id}/rating-summary": {
+      "get": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Average, count and 1–5 star spread for an approved shop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ average, count, distribution }"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/businesses/{id}/promo-video/signature": {
+      "post": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Get a signed Cloudinary upload for this shop's promo video",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Owner only, approved shops only. The browser uploads the video straight to Cloudinary (videos are too large for a serverless request), sending exactly `fields` plus `file`. 20 requests/hour. The API secret never leaves the server.",
+        "responses": {
+          "200": {
+            "description": "{ uploadUrl, fields, publicId, limits }"
+          },
+          "403": {
+            "description": "Shop not approved yet"
+          },
+          "503": {
+            "description": "UPLOAD_NOT_CONFIGURED"
+          }
+        }
+      }
+    },
+    "/businesses/{id}/promo-video": {
+      "post": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Register an uploaded promo video after checking it",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "The server asks Cloudinary about the upload and accepts only MP4/MOV/WebM, ≤ 40 MB, ≤ 60 s, under this shop's own folder. Replaces and deletes the previous video.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "publicId"
+                ],
+                "properties": {
+                  "publicId": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 80
+                  },
+                  "caption": {
+                    "type": "string",
+                    "maxLength": 240
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ url, posterUrl, duration, title, caption }"
+          },
+          "422": {
+            "description": "VIDEO_INVALID (format, > 40 MB or > 60 s — the upload is deleted) or foreign publicId"
+          },
+          "403": {
+            "description": "Shop not approved yet"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Remove my promo video",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ removed }"
+          }
+        }
+      }
+    },
+    "/reviews/to-rate": {
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Items from my delivered orders that I have not rated yet",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "[{ orderId, orderNumber, business, items[] }]"
+          }
+        }
+      }
+    },
+    "/rewards/me": {
+      "get": {
+        "tags": [
+          "Rewards"
+        ],
+        "summary": "My badge, progress and reward coupons",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Badge tiers come from DELIVERED orders (New Member 0, Explorer 1, Regular 3, Loyal Patron 6, Champion 12). Reward coupons: WELCOME10 (new customers), REGULAR5, LOYAL10, CHAMPION100 — each once per customer, unlocked by badge, and enforced again at checkout.",
+        "responses": {
+          "200": {
+            "description": "{ badge, badges[], next, stats, coupons[] }"
+          }
+        }
+      }
+    },
+    "/admin/stats": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Platform statistics (admin only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Computed live from the database. Revenue = what customers paid for delivered orders (gross); the platform takes no commission today.",
+        "responses": {
+          "200": {
+            "description": "users, shops, orders, reviews, coupons, 14-day series"
+          },
+          "403": {
+            "description": "Not the administrator"
+          }
+        }
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Members list (admin only, read-only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "customer",
+                "entrepreneur",
+                "delivery_partner"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Name or email contains"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Users (admin accounts are never listed)"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/status": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Suspend or restore a member (signs them out when suspended)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "isActive"
+                ],
+                "properties": {
+                  "isActive": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ id, isActive }"
+          },
+          "403": {
+            "description": "Cannot change the administrator"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
+    "/admin/businesses/{businessId}/promo-video": {
+      "delete": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Take down a shop's promo video",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "businessId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ removed }"
+          }
+        }
+      }
+    },
+    "/ai/assistant": {
+      "post": {
+        "tags": [
+          "AI"
+        ],
+        "summary": "Customer help assistant (real AI provider only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Answers from app facts, public catalogue matches and, when the question is about orders, the caller's own order statuses. Recommended products/shops are limited to ones actually present in that data. No name, email, phone, address or payment data is sent to the provider.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "message"
+                ],
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "history": {
+                    "type": "array",
+                    "maxItems": 12,
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "role",
+                        "text"
+                      ],
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ reply, products[], businesses[], provider }"
+          },
+          "429": {
+            "description": "Rate limited (30/hour/user)"
+          },
+          "503": {
+            "description": "AI_NOT_CONFIGURED — there is no canned fallback"
           }
         }
       }

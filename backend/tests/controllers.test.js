@@ -124,7 +124,7 @@ describe('business visibility & document privacy', () => {
 describe('products', () => {
   test('create ignores client-supplied rating / isActive / deletedAt', async () => {
     const biz = oid();
-    jest.spyOn(Business, 'findOne').mockResolvedValue({ _id: biz });
+    jest.spyOn(Business, 'findOne').mockResolvedValue({ _id: biz, verification: { status: 'approved' } });
     let saved;
     jest.spyOn(Product, 'create').mockImplementation(async (d) => { saved = d; return d; });
     await run(productController.create, {
@@ -132,6 +132,15 @@ describe('products', () => {
       body: { business: biz.toString(), name: 'Cake', price: 10, rating: { avg: 5, count: 1000 }, isActive: false, deletedAt: new Date() },
     });
     expect(saved).toEqual({ business: biz.toString(), name: 'Cake', price: 10 });
+  });
+  test.each(['pending', 'in_review', 'rejected'])('create is refused while the shop is %s (selling starts after approval)', async (status) => {
+    const biz = oid();
+    jest.spyOn(Business, 'findOne').mockResolvedValue({ _id: biz, verification: { status } });
+    const create = jest.spyOn(Product, 'create').mockResolvedValue({});
+    const r = await run(productController.create, { user: { id: 'u' }, body: { business: biz.toString(), name: 'Cake', price: 10 } });
+    expect(r.error.statusCode).toBe(403);
+    expect(r.error.code).toBe('BUSINESS_NOT_APPROVED');
+    expect(create).not.toHaveBeenCalled();
   });
   test('create on someone else\'s shop -> 403', async () => {
     jest.spyOn(Business, 'findOne').mockResolvedValue(null);

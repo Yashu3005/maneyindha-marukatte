@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
+import '../../shared/rating_widgets.dart';
 import '../../shared/ui.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
@@ -91,6 +92,39 @@ bool _needsPayment(Map o) {
       o['status'] == 'pending';
 }
 
+/// Shows "Rate your order" only while this order still has unrated items (from /reviews/to-rate).
+class _RateButton extends ConsumerWidget {
+  final String orderId;
+  const _RateButton({required this.orderId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pending = ref.watch(toRateProvider).valueOrNull ?? const [];
+    final entry = pending.where((e) => e['orderId'].toString() == orderId).toList();
+    if (entry.isEmpty) return const SizedBox.shrink();
+    final items = ((entry.first['items'] as List?) ?? const [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: OutlinedButton.icon(
+        onPressed: () async {
+          final saved = await showRateOrderSheet(context, orderId: orderId, items: items);
+          ref.invalidate(toRateProvider);
+          ref.invalidate(shopsProvider);
+          if (saved && context.mounted) {
+            ScaffoldMessenger.of(context)
+                .showSnackBar(const SnackBar(content: Text('Thanks for rating!')));
+          }
+        },
+        icon: const Icon(Icons.star_rounded, size: 18),
+        label: const Text('Rate your order'),
+      ),
+    );
+  }
+}
+
 class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
 
@@ -173,6 +207,8 @@ class OrdersScreen extends ConsumerWidget {
                                 visualDensity: VisualDensity.compact,
                               ),
                           ]),
+                          if (status == 'delivered')
+                            _RateButton(orderId: o['_id'].toString()),
                           if (_needsPayment(o))
                             Padding(
                               padding: const EdgeInsets.only(top: 6),

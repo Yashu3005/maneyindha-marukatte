@@ -57,6 +57,8 @@ exports.login = async ({ email, phone, username, password }) => {
     throw new AppError('Invalid credentials', 401);
   }
   if (user.isActive === false) throw new AppError('Account disabled', 403);
+  // The administrator signs in only through /auth/admin/login (credentials held in server configuration).
+  if (PRIVILEGED_ROLES.includes(user.role)) throw new AppError('Invalid credentials', 401);
   return { user: sanitize(user), ...(await issueSession(user)) };
 };
 

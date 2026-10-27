@@ -35,3 +35,20 @@ exports.requireRole = (...roles) => (req, _res, next) => {
   }
   next();
 };
+
+// The admin area: a valid token AND the one configured administrator account. The role in the token alone is
+// not enough, so a stale or forged-by-mistake admin role elsewhere in the data can never open it.
+exports.requireAdmin = [
+  exports.requireAuth,
+  async (req, _res, next) => {
+    try {
+      // Cheap check first: a token that does not even claim an admin role never reaches the database.
+      if (!['admin', 'super_admin'].includes(req.user.role)) return next(new AppError('Forbidden', 403));
+      const User = require('../models/User');
+      const { isTheAdmin } = require('../services/adminAuth.service');
+      const user = await User.findById(req.user.id).select('role isActive username');
+      if (!isTheAdmin(user)) return next(new AppError('Forbidden', 403));
+      next();
+    } catch (e) { next(e); }
+  },
+];

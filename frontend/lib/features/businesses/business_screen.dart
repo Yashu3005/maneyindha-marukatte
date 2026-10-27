@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/repositories.dart';
+import '../../shared/rating_widgets.dart';
+import 'promo_video.dart';
 import '../../shared/ui.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
@@ -22,6 +24,11 @@ class BusinessScreen extends ConsumerWidget {
         data: (b) => ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (b['promoVideo'] is Map && (b['promoVideo'] as Map)['url'] != null)
+              PromoVideoCard(
+                key: ValueKey((b['promoVideo'] as Map)['url']),
+                video: Map<String, dynamic>.from(b['promoVideo'] as Map),
+              ),
             Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(22),
@@ -81,6 +88,8 @@ class BusinessScreen extends ConsumerWidget {
                 ],
               ]),
             ),
+            const SizedBox(height: 14),
+            RatingSummaryCard(businessId: id),
             const SizedBox(height: 24),
             Text('Products', style: serif(20)),
             const SizedBox(height: 12),
@@ -102,6 +111,10 @@ class BusinessScreen extends ConsumerWidget {
                       itemBuilder: (_, i) => ProductCard(product: items[i]),
                     ),
             ),
+            const SizedBox(height: 24),
+            Text('What customers say', style: serif(20)),
+            const SizedBox(height: 12),
+            ReviewsList(businessId: id),
           ],
         ),
       ),

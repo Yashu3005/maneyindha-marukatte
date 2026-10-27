@@ -9,6 +9,7 @@ router.use('/payments', require('./payment.routes'));
 router.use('/cart', require('./cart.routes'));
 router.use('/reviews', require('./review.routes'));
 router.use('/wishlist', require('./wishlist.routes'));
+router.use('/rewards', require('./rewards.routes'));
 router.use('/admin', require('./admin.routes'));
 router.use('/app', require('./app.routes'));
 router.use('/ai', require('./ai.routes'));

@@ -17,6 +17,12 @@ function toPublic(doc, from) {
   delete out.location;
   delete out.publicLocation;
   delete out.locationSource;
+  if (out.promoVideo) {
+    out.promoVideo = out.promoVideo.url
+      ? { url: out.promoVideo.url, posterUrl: out.promoVideo.posterUrl, duration: out.promoVideo.duration,
+          title: out.promoVideo.title, caption: out.promoVideo.caption }
+      : undefined;
+  }
   if (pub?.coordinates?.length === 2) {
     out.location = pub;
     if (from) out.distanceKm = Math.round(haversineKm(from.lat, from.lng, pub.coordinates[1], pub.coordinates[0]) * 10) / 10;
@@ -30,6 +36,35 @@ const CREATE_FIELDS = ['name', 'description', 'category', 'logoUrl', 'bannerUrl'
 const isOwnerOrAdmin = (user, business) =>
   !!user && (ADMIN_ROLES.includes(user.role) || String(business.owner) === String(user.id));
 
+const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const SORTS = { rating: '-rating.avg', newest: '-createdAt', name: 'name' };
+// Own keys only: a query like ?sort=__proto__ must not resolve to Object.prototype.
+const sortFor = (v) => (typeof v === 'string' && Object.prototype.hasOwnProperty.call(SORTS, v) ? SORTS[v] : undefined);
+
+// Filters shared by "all shops" and "near me": category, text, minimum rating, open now, has a promo video.
+async function discoveryFilter(query) {
+  const filter = { 'verification.status': 'approved', isActive: true };
+  if (query.category) {
+    const c = String(query.category).trim();
+    if (isObjectId(c)) filter.category = c;
+    else {
+      const cat = await Category.findOne({ name: new RegExp(`^${escapeRegex(c)}$`, 'i') }).select('_id');
+      filter.category = cat ? cat._id : { $in: [] }; // unknown category -> no shops
+    }
+  }
+  if (query.q && String(query.q).trim()) {
+    filter.name = new RegExp(escapeRegex(String(query.q).trim().slice(0, 60)), 'i');
+  }
+  const minRating = Number(query.minRating);
+  if (Number.isFinite(minRating) && minRating > 0) {
+    filter['rating.avg'] = { $gte: Math.min(minRating, 5) };
+    filter['rating.count'] = { $gte: 1 }; // "4★ and above" never includes unrated shops
+  }
+  if (query.openNow === 'true' || query.openNow === true) filter.isOpen = true;
+  if (query.hasVideo === 'true' || query.hasVideo === true) filter['promoVideo.url'] = { $exists: true };
+  return filter;
+}
+
 exports.nearby = async (req, res, next) => {
   try {
     const { lat, lng } = req.query;
@@ -41,19 +76,19 @@ exports.nearby = async (req, res, next) => {
     }
     const radiusKm = Math.min(Math.max(Number(req.query.radiusKm) || 10, 0.1), 200);
     const { page, limit, skip } = parsePage(req.query);
-    const businesses = await Business.find({
-      'verification.status': 'approved',
-      isActive: true,
-      publicLocation: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [lngN, latN] },
-          $maxDistance: radiusKm * 1000,
-        },
-      },
-    })
-      .select(PUBLIC_EXCLUDE)
-      .skip(skip)
-      .limit(limit);
+    const filter = await discoveryFilter(req.query);
+    const sortKey = sortFor(req.query.sort);
+    let query;
+    if (sortKey) {
+      // Re-ordered by rating/newest/name: bound by radius, the distance is still reported per shop.
+      filter.publicLocation = { $geoWithin: { $centerSphere: [[lngN, latN], radiusKm / 6378.1] } };
+      query = Business.find(filter).sort(sortKey);
+    } else {
+      // Default: nearest first.
+      filter.publicLocation = { $near: { $geometry: { type: 'Point', coordinates: [lngN, latN] }, $maxDistance: radiusKm * 1000 } };
+      query = Business.find(filter);
+    }
+    const businesses = await query.select(PUBLIC_EXCLUDE).skip(skip).limit(limit).populate('category', 'name');
     ok(res, businesses.map((b) => toPublic(b, { lat: latN, lng: lngN })), { page, limit });
   } catch (e) { next(e); }
 };
@@ -145,9 +180,10 @@ exports.removeDocument = async (req, res, next) => {
 exports.list = async (req, res, next) => {
   try {
     const { page, limit, skip } = parsePage(req.query);
-    const filter = { 'verification.status': 'approved', isActive: true };
+    const filter = await discoveryFilter(req.query);
+    const sort = sortFor(req.query.sort) || '-rating.avg';
     const [items, total] = await Promise.all([
-      Business.find(filter).select(PUBLIC_EXCLUDE).sort('-rating.avg')
+      Business.find(filter).select(PUBLIC_EXCLUDE).sort(sort)
         .skip(skip).limit(limit).populate('category', 'name'),
       Business.countDocuments(filter),
     ]);
@@ -161,5 +197,30 @@ exports.mine = async (req, res, next) => {
       .find({ owner: req.user.id, isActive: true })
       .populate('category', 'name');
     ok(res, items);
+  } catch (e) { next(e); }
+};
+
+// ---- Promo ("story") video ----
+exports.promoSignature = async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'no-store');
+    ok(res, await require('../services/promoVideo.service').createUploadSignature(req.user.id, req.params.id));
+  } catch (e) { next(e); }
+};
+exports.promoAttach = async (req, res, next) => {
+  try { ok(res, await require('../services/promoVideo.service').attachVideo(req.user.id, req.params.id, req.body)); } catch (e) { next(e); }
+};
+exports.promoRemove = async (req, res, next) => {
+  try { ok(res, await require('../services/promoVideo.service').removeVideo(req.user.id, req.params.id)); } catch (e) { next(e); }
+};
+
+// ---- Ratings ----
+// Average, count and the 1-5 star spread for a shop — computed from its real reviews.
+exports.ratingSummary = async (req, res, next) => {
+  try {
+    if (!isObjectId(req.params.id)) throw new AppError('Business not found', 404);
+    const business = await Business.findOne({ _id: req.params.id, isActive: true, 'verification.status': 'approved' }).select('rating');
+    if (!business) throw new AppError('Business not found', 404);
+    ok(res, await require('../services/review.service').businessSummary(business._id));
   } catch (e) { next(e); }
 };

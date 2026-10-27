@@ -594,14 +594,23 @@ class ApplicationStatusScreen extends ConsumerWidget {
             Text(
               approved
                   ? 'Congratulations!\nYour entrepreneur account\nhas been approved.'
-                  : 'Status: ${status.replaceAll('_', ' ')}\nOur team is reviewing your application.',
+                  : status == 'in_review'
+                      ? 'Submitted — waiting for approval.\nOur team is checking your documents.'
+                      : status == 'rejected'
+                          ? 'Your application was not approved.\nPlease update your documents and submit again.'
+                          : 'Your application has not been submitted yet.\nUpload your documents to continue.',
               textAlign: TextAlign.center,
               style: serif(16, weight: FontWeight.w400, color: MMColors.cream),
             ),
             const SizedBox(height: 32),
-            CreamButton(
-                label: 'Continue — Create credentials',
-                onTap: () => context.go('/seller/onboarding/credentials')),
+            if (approved)
+              CreamButton(
+                  label: 'Continue — Create credentials',
+                  onTap: () => context.go('/seller/onboarding/credentials'))
+            else
+              Text('You will be able to continue once an administrator approves your documents.',
+                  textAlign: TextAlign.center,
+                  style: serif(13, weight: FontWeight.w400, color: MMColors.cream)),
             const SizedBox(height: 10),
             TextButton(
               onPressed: () => ref.invalidate(myBusinessesProvider),
