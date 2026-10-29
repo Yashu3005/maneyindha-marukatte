@@ -10,6 +10,7 @@ const optStr = (max) => Joi.string().trim().max(max).allow('');
 
 router.get('/', businessController.list);
 router.get('/mine', requireAuth, requireRole('entrepreneur'), businessController.mine);
+router.get('/promo-ads', businessController.promoAds);   // ?limit=4 — random approved shop videos
 router.get('/nearby', businessController.nearby);          // ?lat=&lng=&radiusKm=&sort=&category=&minRating=&openNow=&hasVideo=&q=
 // Owner-only: set the shop's exact location (from the device or typed in by hand).
 router.patch('/:id/location', requireAuth, requireRole('entrepreneur'), validate(geo.setLocationSchema), businessController.setLocation);

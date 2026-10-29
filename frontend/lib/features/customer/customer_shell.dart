@@ -1,6 +1,7 @@
 import '../../shared/user_avatar.dart';
 import '../../services/device_location.dart';
 import 'package:flutter/material.dart';
+import '../businesses/promo_ads_carousel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/auth_state.dart';
@@ -122,7 +123,7 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
     final businesses = ref.watch(shopsProvider(_filters));
     // Category circles always come from the unfiltered list so they don't vanish once one is chosen.
     final allShops = ref.watch(shopsProvider(const ShopFilters()));
-    final badge = auth.isLoggedIn ? ref.watch(rewardsProvider).valueOrNull?['badge'] as Map? : null;
+    final Map? badge = auth.isLoggedIn ? (ref.watch(rewardsProvider).valueOrNull?['badge'] as Map?) : null;
     final products = ref.watch(productsProvider(null));
 
     return SafeArea(
@@ -130,6 +131,7 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
         onRefresh: () async {
           ref.invalidate(shopsProvider);
           ref.invalidate(productsProvider);
+          ref.invalidate(promoAdsProvider);
         },
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -185,6 +187,7 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
               ),
             ]),
             const SizedBox(height: 16),
+            const PromoAdsCarousel(),
             TextField(
               onChanged: (v) => setState(() => _query = v.toLowerCase()),
               decoration: const InputDecoration(

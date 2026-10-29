@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 // Provider-agnostic AI service layer. Feature code calls the functions exported here and never
 // imports a provider. Switch providers with AI_PROVIDER=gemini|openai (default gemini).
 const Joi = require('joi');
@@ -126,11 +127,21 @@ async function generateAssistantReply({ message, history = [], guide, catalogue 
     '<conversation>', JSON.stringify(turns), '</conversation>',
     '<customer_message>', clean(message).slice(0, 500), '</customer_message>',
   ].join('\n');
-  const raw = await provider.completeJson({
-    system: ASSISTANT_SYSTEM, prompt, schema: ASSISTANT_GEMINI_SCHEMA, jsonSchema: ASSISTANT_OPENAI_SCHEMA, maxTokens: 1500,
-  });
+  const completeWithRetry = async () => {
+    const call = () => provider.completeJson({
+      system: ASSISTANT_SYSTEM, prompt, schema: ASSISTANT_GEMINI_SCHEMA, jsonSchema: ASSISTANT_OPENAI_SCHEMA, maxTokens: 8192,
+    });
+    try { return await call(); } catch (e) {
+      if (e && e.code === 'AI_BAD_OUTPUT') return call(); // a second try usually succeeds
+      throw e;
+    }
+  };
+  const raw = await completeWithRetry();
   const { value, error } = assistantOutput.validate(raw, { stripUnknown: false });
-  if (error) throw errors.badOutput();
+  if (error) {
+    logger.warn(`Assistant answer rejected: ${error.message}`);
+    throw errors.badOutput();
+  }
   const reply = clean(value.reply).slice(0, MAX_REPLY);
   if (!reply) throw errors.badOutput();
   return { reply, productIds: value.productIds, businessIds: value.businessIds, provider: provider.name };

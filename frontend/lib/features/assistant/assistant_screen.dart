@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
-import '../../shared/ui.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
 
@@ -84,12 +83,14 @@ class _AssistantScreenState extends ConsumerState<AssistantScreen> {
             businesses: ((d['businesses'] as List?) ?? const []).whereType<Map>().toList(),
           )));
     } on DioException catch (e) {
-      final code = e.response?.statusCode;
+      final status = e.response?.statusCode;
+      final body = e.response?.data;
+      final errCode = (body is Map && body['error'] is Map) ? body['error']['code']?.toString() : null;
       setState(() => _msgs.add(_Msg(
             false,
-            code == 503
-                ? 'The assistant is not switched on for this app yet. Please try again later.'
-                : code == 429
+            errCode == 'AI_NOT_CONFIGURED'
+                ? 'The assistant is not switched on for this app yet.'
+                : status == 429
                     ? 'You have asked a lot of questions in a short time. Please try again a little later.'
                     : apiError(e),
             isError: true,

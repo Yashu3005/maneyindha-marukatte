@@ -11,6 +11,9 @@ class TokenStore {
     refreshToken = prefs.getString('refreshToken');
   }
 
+  /// "Keep me signed in on this device". When off, tokens live in memory only and are gone on reload/close.
+  static bool remember = true;
+
   /// Saves the access token (and, when given, a new refresh token).
   /// Passing a null access token signs out and clears both.
   static Future<void> save(String? token, {String? refresh}) async {
@@ -18,12 +21,12 @@ class TokenStore {
     final newRefresh = token == null ? null : (refresh ?? refreshToken);
     refreshToken = newRefresh;
     final prefs = await SharedPreferences.getInstance();
-    if (token == null) {
+    if (token == null || !remember) {
       await prefs.remove('accessToken');
     } else {
       await prefs.setString('accessToken', token);
     }
-    if (newRefresh == null) {
+    if (newRefresh == null || !remember) {
       await prefs.remove('refreshToken');
     } else {
       await prefs.setString('refreshToken', newRefresh);

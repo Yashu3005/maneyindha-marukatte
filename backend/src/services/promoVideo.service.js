@@ -70,6 +70,8 @@ async function createUploadSignature(ownerId, businessId) {
 }
 
 const publicShape = (v) => (v?.url ? { url: v.url, posterUrl: v.posterUrl, duration: v.duration, title: v.title, caption: v.caption } : null);
+// What the owner gets back: the same plus where the video is in review.
+const ownerShape = (v) => (v?.url ? { ...publicShape(v), status: v.review?.status || 'pending', reason: v.review?.reason } : null);
 
 /** Step 2: the browser reports the finished upload; we verify it with Cloudinary before accepting it. */
 async function attachVideo(ownerId, businessId, { publicId, title, caption }) {
@@ -102,12 +104,13 @@ async function attachVideo(ownerId, businessId, { publicId, title, caption }) {
     title: String(title || '').trim().slice(0, 80) || undefined,
     caption: String(caption || '').trim().slice(0, 240) || undefined,
     uploadedAt: new Date(),
+    review: { status: 'pending' }, // not shown to customers until the admin approves it
   };
   await business.save();
   if (previous && previous !== publicId) {
     await Promise.resolve(provider.destroy(previous)).catch((e) => logger.warn(`Old promo video cleanup failed: ${e?.message}`));
   }
-  return publicShape(business.promoVideo);
+  return ownerShape(business.promoVideo);
 }
 
 async function removeVideo(ownerId, businessId) {
@@ -133,7 +136,57 @@ async function clear(business) {
   return { removed: !!previous };
 }
 
+const AD_STATUSES = ['pending', 'approved', 'rejected'];
+
+/** Admin queue: shops whose video is in the given review state (oldest first). */
+async function listForReview(status = 'pending') {
+  if (!AD_STATUSES.includes(status)) throw new AppError('Invalid status', 422);
+  // A video saved before reviews existed has no status, so it counts as pending.
+  const match = status === 'pending'
+    ? { $or: [{ 'promoVideo.review.status': 'pending' }, { 'promoVideo.review.status': { $exists: false } }] }
+    : { 'promoVideo.review.status': status };
+  const shops = await Business.find({ isActive: true, 'promoVideo.url': { $exists: true }, ...match })
+    .select('name promoVideo').sort('promoVideo.uploadedAt').limit(100).lean();
+  return shops.map((b) => ({
+    businessId: b._id, name: b.name,
+    promoVideo: { ...publicShape(b.promoVideo), uploadedAt: b.promoVideo.uploadedAt,
+      status: b.promoVideo.review?.status || 'pending', reason: b.promoVideo.review?.reason },
+  }));
+}
+
+/** Admin decision. Rejecting needs a short reason the owner will see. */
+async function reviewVideo(businessId, action, reason) {
+  const business = await Business.findById(businessId);
+  if (!business?.promoVideo?.url) throw new AppError('This shop has no video to review', 404);
+  if (action === 'approve') {
+    business.promoVideo.review = { status: 'approved', reviewedAt: new Date() };
+  } else if (action === 'reject') {
+    const why = String(reason || '').trim().slice(0, 300);
+    if (!why) throw new AppError('Please give a short reason for rejecting', 422);
+    business.promoVideo.review = { status: 'rejected', reason: why, reviewedAt: new Date() };
+  } else {
+    throw new AppError('Invalid action', 422);
+  }
+  await business.save();
+  return { businessId: business._id, status: business.promoVideo.review.status };
+}
+
+/** A few random approved videos from open, approved shops, for the home screen. */
+async function randomApprovedAds(limit = 4) {
+  const rows = await Business.aggregate([
+    { $match: { isActive: true, 'verification.status': 'approved', 'promoVideo.review.status': 'approved', 'promoVideo.url': { $exists: true } } },
+    { $sample: { size: limit } },
+    { $project: { name: 1, logoUrl: 1, 'rating.avg': 1, 'rating.count': 1,
+      'promoVideo.url': 1, 'promoVideo.posterUrl': 1, 'promoVideo.title': 1, 'promoVideo.caption': 1, 'promoVideo.duration': 1 } },
+  ]);
+  return rows.map((b) => ({
+    businessId: b._id, name: b.name, logoUrl: b.logoUrl, rating: b.rating,
+    video: publicShape(b.promoVideo),
+  }));
+}
+
 module.exports = {
   createUploadSignature, attachVideo, removeVideo, adminRemoveVideo, publicShape,
+  listForReview, reviewVideo, randomApprovedAds,
   MAX_BYTES, MAX_SECONDS, FORMATS, _provider: provider,
 };

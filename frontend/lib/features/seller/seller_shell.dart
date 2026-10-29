@@ -2,6 +2,7 @@ import '../../shared/user_avatar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:dio/dio.dart' show FormData, MultipartFile;
 import 'package:image_picker/image_picker.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
@@ -281,6 +282,20 @@ class _ProductsTab extends ConsumerStatefulWidget {
 }
 
 class _ProductsTabState extends ConsumerState<_ProductsTab> {
+  /// Opens the phone/computer gallery, checks size, uploads to the server and returns the photo URL.
+  Future<String?> _pickGalleryPhoto() async {
+    final picked = await ImagePicker()
+        .pickImage(source: ImageSource.gallery, maxWidth: 1600, imageQuality: 85);
+    if (picked == null) return null; // cancelled
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > 3 * 1024 * 1024) {
+      throw 'Please choose an image under 3 MB.';
+    }
+    final form = FormData.fromMap({'photo': MultipartFile.fromBytes(bytes, filename: picked.name)});
+    final res = await ApiClient.dio.post('/products/photo', data: form);
+    return (res.data['data'] as Map)['url'].toString();
+  }
+
   Future<void> _addProduct(String businessId) async {
     final name = TextEditingController();
     final price = TextEditingController();
@@ -289,6 +304,8 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
     String? imageUrl;
     bool aiBusy = false;
     String? aiNote;
+    bool photoBusy = false;
+    String? photoNote;
 
     final saved = await showDialog<bool>(
       context: context,
@@ -348,6 +365,48 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(imageUrl == null ? 'Product photo:' : 'Photo selected ✓'),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    icon: photoBusy
+                        ? const SizedBox(width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.photo_library_outlined, size: 18),
+                    label: Text(photoBusy ? 'Uploading…' : 'Choose from gallery'),
+                    onPressed: photoBusy
+                        ? null
+                        : () async {
+                            setD(() { photoBusy = true; photoNote = null; });
+                            try {
+                              final url = await _pickGalleryPhoto();
+                              if (url != null && ctx2.mounted) setD(() => imageUrl = url);
+                            } catch (e) {
+                              if (ctx2.mounted) setD(() => photoNote = apiError(e));
+                            } finally {
+                              if (ctx2.mounted) setD(() => photoBusy = false);
+                            }
+                          },
+                  ),
+                ),
+                if (photoNote != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(photoNote!, style: Theme.of(ctx2).textTheme.bodySmall),
+                  ),
+                if (imageUrl != null && !imageUrl!.contains('pexels'))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(imageUrl!, height: 90, fit: BoxFit.cover),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Or pick a suggestion:'),
                 ),
                 const SizedBox(height: 6),
                 Consumer(builder: (c, r, _) {

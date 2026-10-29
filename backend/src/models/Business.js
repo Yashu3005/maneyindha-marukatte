@@ -49,6 +49,12 @@ const businessSchema = new mongoose.Schema(
       duration: Number, bytes: Number, format: String,
       title: { type: String, maxlength: 80 }, caption: { type: String, maxlength: 240 },
       uploadedAt: Date,
+      // Videos are only shown to customers after the admin approves them.
+      review: {
+        status: { type: String, enum: ['pending', 'approved', 'rejected'] },
+        reason: { type: String, maxlength: 300 },
+        reviewedAt: Date,
+      },
     },
     rating: { avg: { type: Number, default: 0 }, count: { type: Number, default: 0 } },
     followerCount: { type: Number, default: 0 },

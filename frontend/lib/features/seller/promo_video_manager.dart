@@ -109,7 +109,7 @@ class _PromoVideoSheetState extends ConsumerState<_PromoVideoSheet> {
         final pv = saved?['promoVideo'] ?? saved;
         if (pv is Map && pv['url'] != null) _video = Map<String, dynamic>.from(pv);
       });
-      _say('Your video is live on your shop page.');
+      _say('Sent to the admin for approval. It goes live once approved.');
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() { _busy = false; _progress = null; });
@@ -147,11 +147,12 @@ class _PromoVideoSheetState extends ConsumerState<_PromoVideoSheet> {
         Text('Your shop video', style: serif(22)),
         const SizedBox(height: 6),
         Text(
-          'Show how you make your products. It plays at the top of your shop page. '
+          'Show how you make your products. The admin checks every video first; once approved it plays on your shop page and can appear as an ad on the home screen. '
           'MP4, MOV or WebM · up to 60 seconds · up to 40 MB.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 14),
+        if (_video != null) _ReviewBanner(video: _video!),
         if (_video != null) PromoVideoCard(key: ValueKey(_video!['url']), video: _video!),
         TextField(
           controller: _title,
@@ -185,6 +186,34 @@ class _PromoVideoSheetState extends ConsumerState<_PromoVideoSheet> {
         if (_video != null)
           TextButton(onPressed: _busy ? null : _remove, child: const Text('Remove video')),
       ]),
+    );
+  }
+}
+
+/// Where the owner's video is in the admin's review.
+class _ReviewBanner extends StatelessWidget {
+  final Map<String, dynamic> video;
+  const _ReviewBanner({required this.video});
+
+  @override
+  Widget build(BuildContext context) {
+    final review = video['review'] is Map ? video['review'] as Map : const {};
+    final status = (video['status'] ?? review['status'] ?? 'pending').toString();
+    final reason = (video['reason'] ?? review['reason'] ?? '').toString();
+    final text = switch (status) {
+      'approved' => 'Approved — your video is live.',
+      'rejected' => reason.isEmpty ? 'Rejected by the admin. Please upload a new video.' : 'Rejected: $reason',
+      _ => 'Waiting for the admin to approve it. Customers cannot see it yet.',
+    };
+    final color = status == 'approved' ? MMColors.moss : status == 'rejected' ? MMColors.clay : Colors.orange.shade800;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+        child: Text(text, style: TextStyle(color: color)),
+      ),
     );
   }
 }

@@ -36,6 +36,13 @@ exports.setUserStatus = async (req, res, next) => {
   try { ok(res, await adminService.setUserActive(req.params.id, req.body.isActive)); } catch (e) { next(e); }
 };
 
+exports.listPromoVideos = async (req, res, next) => {
+  try { ok(res, await require('../services/promoVideo.service').listForReview(req.query.status || 'pending')); } catch (e) { next(e); }
+};
+exports.reviewPromoVideo = async (req, res, next) => {
+  try { ok(res, await require('../services/promoVideo.service').reviewVideo(req.params.businessId, req.body.action, req.body.reason)); } catch (e) { next(e); }
+};
+
 exports.removePromoVideo = async (req, res, next) => {
   try { ok(res, await require('../services/promoVideo.service').adminRemoveVideo(req.params.businessId)); } catch (e) { next(e); }
 };

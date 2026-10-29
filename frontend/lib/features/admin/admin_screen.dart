@@ -7,6 +7,7 @@ import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
 import 'admin_dashboard.dart';
+import 'promo_videos_tab.dart';
 
 /// Applications tab: documents + approve/reject. Only submitted (in_review) applications can be approved.
 class ApplicationsTab extends ConsumerStatefulWidget {
@@ -220,7 +221,7 @@ class AdminScreen extends ConsumerWidget {
       );
     }
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Administrator'),
@@ -248,12 +249,14 @@ class AdminScreen extends ConsumerWidget {
             Tab(text: 'Overview'),
             Tab(text: 'Applications'),
             Tab(text: 'Members'),
+            Tab(text: 'Videos'),
           ]),
         ),
         body: const TabBarView(children: [
           AdminOverviewTab(),
           ApplicationsTab(),
           AdminMembersTab(),
+          PromoVideosTab(),
         ]),
       ),
     );

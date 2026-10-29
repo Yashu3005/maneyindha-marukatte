@@ -18,7 +18,7 @@ function toPublic(doc, from) {
   delete out.publicLocation;
   delete out.locationSource;
   if (out.promoVideo) {
-    out.promoVideo = out.promoVideo.url
+    out.promoVideo = out.promoVideo.url && out.promoVideo.review?.status === 'approved'
       ? { url: out.promoVideo.url, posterUrl: out.promoVideo.posterUrl, duration: out.promoVideo.duration,
           title: out.promoVideo.title, caption: out.promoVideo.caption }
       : undefined;
@@ -61,7 +61,7 @@ async function discoveryFilter(query) {
     filter['rating.count'] = { $gte: 1 }; // "4★ and above" never includes unrated shops
   }
   if (query.openNow === 'true' || query.openNow === true) filter.isOpen = true;
-  if (query.hasVideo === 'true' || query.hasVideo === true) filter['promoVideo.url'] = { $exists: true };
+  if (query.hasVideo === 'true' || query.hasVideo === true) filter['promoVideo.review.status'] = 'approved';
   return filter;
 }
 
@@ -188,6 +188,15 @@ exports.list = async (req, res, next) => {
       Business.countDocuments(filter),
     ]);
     ok(res, items.map((b) => toPublic(b)), { page, limit, total });
+  } catch (e) { next(e); }
+};
+
+// Home-screen ads: a few random approved shop videos, different on every visit.
+exports.promoAds = async (req, res, next) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 4, 1), 8);
+    res.set('Cache-Control', 'no-store');
+    ok(res, await require('../services/promoVideo.service').randomApprovedAds(limit));
   } catch (e) { next(e); }
 };
 

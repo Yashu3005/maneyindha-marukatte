@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../shared/mm_logo.dart';
+import '../../shared/keep_signed_in.dart';
 import '../../theme/app_theme.dart';
 
 /// The single administrator signs in here with the username and password set on the server.
@@ -74,6 +75,8 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 4),
+              const Align(alignment: Alignment.centerLeft, child: KeepSignedInBox()),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import '../../services/api_client.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/mm_logo.dart';
+import '../../shared/keep_signed_in.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -36,6 +38,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         }
       }
     } catch (e) {
+      // The one administrator signs in with a username (no "@"). If the normal sign-in said no, try the
+      // dedicated admin sign-in before showing an error. The server decides; this never grants anything itself.
+      if (e is DioException && e.response?.statusCode == 401 && !_email.text.contains('@')) {
+        try {
+          await ref.read(authProvider.notifier).adminLogin(_email.text.trim(), _password.text);
+          if (mounted) context.go('/admin');
+          return;
+        } catch (_) {/* fall through to the original error */}
+      }
       setState(() => _error = apiError(e));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -62,6 +73,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               TextField(controller: _password, obscureText: true,
                   onSubmitted: (_) => _submit(),
                   decoration: const InputDecoration(labelText: 'Password')),
+              const SizedBox(height: 4),
+              const Align(alignment: Alignment.centerLeft, child: KeepSignedInBox()),
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),

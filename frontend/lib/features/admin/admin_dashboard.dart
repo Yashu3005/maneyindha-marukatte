@@ -138,7 +138,7 @@ class _Grid extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(t.value, style: serif(20, color: t.highlight ? MMColors.clay : null)),
+                  Text(t.value, style: t.highlight ? serif(20, color: MMColors.clay) : serif(20)),
                   Text(t.label, style: Theme.of(context).textTheme.bodySmall),
                 ]),
               ),

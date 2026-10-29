@@ -81,7 +81,7 @@ describe('attach (the server checks what was uploaded)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({
       url: `https://res.cloudinary.com/demo/video/upload/${pid()}.mp4`, posterUrl: expect.stringMatching(/\.jpg$/),
-      duration: 32.4, title: 'Making of our cakes', caption: 'Baked fresh every morning',
+      duration: 32.4, title: 'Making of our cakes', caption: 'Baked fresh every morning', status: 'pending', reason: undefined,
     });
     expect(biz.promoVideo.publicId).toBe(pid());
     expect(biz.promoVideo.bytes).toBe(GOOD_INFO.bytes);
@@ -170,12 +170,64 @@ describe('remove and takedown', () => {
 
 describe('public shape', () => {
   test('GET /businesses/:id for a customer shows the video without storage ids; the owner sees their own record', async () => {
-    biz.promoVideo = { publicId: pid(), url: 'https://res.cloudinary.com/demo/video/upload/x.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/upload/x.jpg', duration: 20, bytes: 1234, format: 'mp4', title: 'Hello' };
+    biz.promoVideo = { publicId: pid(), url: 'https://res.cloudinary.com/demo/video/upload/x.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/upload/x.jpg', duration: 20, bytes: 1234, format: 'mp4', title: 'Hello', review: { status: 'approved' } };
     jest.spyOn(Business, 'findById').mockReturnValue({ populate: async () => biz });
     const pub = await request(app).get(`${api}/businesses/${bizId}`).set(bearer('customer'));
     expect(pub.status).toBe(200);
     expect(pub.body.data.promoVideo).toEqual({ url: expect.any(String), posterUrl: expect.any(String), duration: 20, title: 'Hello', caption: undefined });
     expect(JSON.stringify(pub.body)).not.toContain(pid());
     expect(JSON.stringify(pub.body)).not.toContain('1234');
+  });
+});
+
+describe('admin review and home ads', () => {
+  const reviewUrl = () => `${api}/admin/businesses/${bizId}/promo-video/review`;
+  test('a new video starts pending and is hidden from customers until approved', async () => {
+    await attach({ publicId: pid() });
+    expect(biz.promoVideo.review.status).toBe('pending');
+    jest.spyOn(Business, 'findById').mockReturnValue({ populate: async () => biz });
+    const hidden = await request(app).get(`${api}/businesses/${bizId}`).set(bearer('customer'));
+    expect(hidden.body.data.promoVideo).toBeUndefined();
+    biz.promoVideo.review = { status: 'approved' };
+    const shown = await request(app).get(`${api}/businesses/${bizId}`).set(bearer('customer'));
+    expect(shown.body.data.promoVideo.url).toMatch(/^https:/);
+  });
+  test('only the admin can review; approve goes live, reject needs a reason', async () => {
+    await attach({ publicId: pid() });
+    expect((await request(app).post(reviewUrl()).set(bearer('entrepreneur', ownerId)).send({ action: 'approve' })).status).toBe(403);
+    installAdmin(User);
+    expect((await request(app).post(reviewUrl()).set(adminBearer()).send({ action: 'reject' })).status).toBe(422);
+    expect(biz.promoVideo.review.status).toBe('pending');
+    const rej = await request(app).post(reviewUrl()).set(adminBearer()).send({ action: 'reject', reason: 'Please film in better light' });
+    expect(rej.status).toBe(200);
+    expect(biz.promoVideo.review).toMatchObject({ status: 'rejected', reason: 'Please film in better light' });
+    expect((await request(app).post(reviewUrl()).set(adminBearer()).send({ action: 'approve' })).body.data.status).toBe('approved');
+    expect(biz.promoVideo.review.status).toBe('approved');
+  });
+  test('the admin queue lists pending videos (legacy ones without a status included)', async () => {
+    biz.promoVideo = { publicId: pid(), url: 'https://res.cloudinary.com/demo/video/upload/x.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/upload/x.jpg', duration: 9 };
+    const chain = { select: () => chain, sort: () => chain, limit: () => chain, lean: async () => [{ _id: biz._id, name: biz.name, promoVideo: biz.promoVideo }] };
+    const find = jest.spyOn(Business, 'find').mockReturnValue(chain);
+    installAdmin(User);
+    const res = await request(app).get(`${api}/admin/promo-videos`).set(adminBearer());
+    expect(res.status).toBe(200);
+    expect(res.body.data[0]).toMatchObject({ name: 'Asha Bakes', promoVideo: { status: 'pending' } });
+    expect(JSON.stringify(find.mock.calls[0][0])).toContain('pending');
+    expect((await request(app).get(`${api}/admin/promo-videos`).set(bearer('customer'))).status).toBe(403);
+  });
+  test('home ads: public, at most the asked count, only approved videos from approved shops, never cached', async () => {
+    const agg = jest.spyOn(Business, 'aggregate').mockResolvedValue([
+      { _id: biz._id, name: 'Asha Bakes', rating: { avg: 4.5, count: 3 }, promoVideo: { url: 'https://res.cloudinary.com/demo/video/upload/x.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/upload/x.jpg', title: 'Hi', duration: 12 } },
+    ]);
+    const res = await request(app).get(`${api}/businesses/promo-ads?limit=4`);
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toMatch(/no-store/);
+    expect(res.body.data[0]).toMatchObject({ businessId: String(biz._id), name: 'Asha Bakes', video: { url: expect.stringMatching(/^https:/) } });
+    const pipeline = agg.mock.calls[0][0];
+    expect(JSON.stringify(pipeline[0])).toContain('"promoVideo.review.status":"approved"');
+    expect(JSON.stringify(pipeline[0])).toContain('"verification.status":"approved"');
+    expect(pipeline[1]).toEqual({ $sample: { size: 4 } });
+    await request(app).get(`${api}/businesses/promo-ads?limit=99`);
+    expect(agg.mock.calls[1][0][1]).toEqual({ $sample: { size: 8 } });
   });
 });

@@ -352,7 +352,7 @@
               "minimum": 0,
               "maximum": 5
             },
-            "description": "Only shops with at least one review and an average ≥ this"
+            "description": "Only shops with at least one review and an average \u2265 this"
           },
           {
             "name": "openNow",
@@ -467,7 +467,7 @@
               "minimum": 0,
               "maximum": 5
             },
-            "description": "Only shops with at least one review and an average ≥ this"
+            "description": "Only shops with at least one review and an average \u2265 this"
           },
           {
             "name": "openNow",
@@ -1052,7 +1052,7 @@
         "tags": [
           "Businesses"
         ],
-        "summary": "Submit the application for review (status → in_review)",
+        "summary": "Submit the application for review (status \u2192 in_review)",
         "security": [
           {
             "bearerAuth": []
@@ -1257,7 +1257,7 @@
             "description": "OK"
           }
         },
-        "description": "Idempotent. Access tokens already issued remain valid until they expire (≤15 min).",
+        "description": "Idempotent. Access tokens already issued remain valid until they expire (\u226415 min).",
         "requestBody": {
           "required": true,
           "content": {
@@ -1456,7 +1456,7 @@
             "bearerAuth": []
           }
         ],
-        "description": "multipart/form-data, field `avatar`. JPEG/PNG/WebP decided by file content (not the declared type), ≤ 2 MB, 20 uploads/hour. Stored on Cloudinary; one stable object per user.",
+        "description": "multipart/form-data, field `avatar`. JPEG/PNG/WebP decided by file content (not the declared type), \u2264 2 MB, 20 uploads/hour. Stored on Cloudinary; one stable object per user.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1766,7 +1766,7 @@
             "description": "Payments not configured"
           }
         },
-        "description": "Amount is computed from the stored order total (rupees × 100 → paise); any amount in the request is ignored. Idempotent: repeating returns the same Razorpay order. Test/sandbox keys only until you go live.",
+        "description": "Amount is computed from the stored order total (rupees \u00d7 100 \u2192 paise); any amount in the request is ignored. Idempotent: repeating returns the same Razorpay order. Test/sandbox keys only until you go live.",
         "security": [
           {
             "bearerAuth": []
@@ -1983,7 +1983,7 @@
             }
           }
         },
-        "description": "Provider-backed (AI_PROVIDER=gemini|openai). Only the product name/category/details are sent to the provider. Output is schema-validated (20–600 chars) and sanitised; a draft for the seller to review. 30 requests/hour/user.",
+        "description": "Provider-backed (AI_PROVIDER=gemini|openai). Only the product name/category/details are sent to the provider. Output is schema-validated (20\u2013600 chars) and sanitised; a draft for the seller to review. 30 requests/hour/user.",
         "security": [
           {
             "bearerAuth": []
@@ -2285,7 +2285,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ status, documents[] } — no storage ids"
+            "description": "{ status, documents[] } \u2014 no storage ids"
           },
           "404": {
             "description": "Not your business"
@@ -2312,7 +2312,7 @@
             }
           }
         ],
-        "description": "multipart/form-data: `file` plus `type` (id_proof | business_proof | address_proof | other) and, for id_proof, `identityType` (Aadhaar | Voter ID | Driving License | Passport). PDF, JPEG, PNG or WebP decided by file content, ≤ 5 MB, 40 uploads/hour. Stored as a private (authenticated) asset, never as a public URL. One document per type: re-uploading replaces it. Only while the application is pending or rejected.",
+        "description": "multipart/form-data: `file` plus `type` (id_proof | business_proof | address_proof | other) and, for id_proof, `identityType` (Aadhaar | Voter ID | Driving License | Passport). PDF, JPEG, PNG or WebP decided by file content, \u2264 5 MB, 40 uploads/hour. Stored as a private (authenticated) asset, never as a public URL. One document per type: re-uploading replaces it. Only while the application is pending or rejected.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2446,7 +2446,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ url, expiresInSeconds, mime, type } — Cache-Control: no-store"
+            "description": "{ url, expiresInSeconds, mime, type } \u2014 Cache-Control: no-store"
           },
           "404": {
             "description": "Not found"
@@ -2510,7 +2510,7 @@
         "tags": [
           "Businesses"
         ],
-        "summary": "Average, count and 1–5 star spread for an approved shop",
+        "summary": "Average, count and 1\u20135 star spread for an approved shop",
         "parameters": [
           {
             "name": "id",
@@ -2587,7 +2587,7 @@
             }
           }
         ],
-        "description": "The server asks Cloudinary about the upload and accepts only MP4/MOV/WebM, ≤ 40 MB, ≤ 60 s, under this shop's own folder. Replaces and deletes the previous video.",
+        "description": "The server asks Cloudinary about the upload and accepts only MP4/MOV/WebM, \u2264 40 MB, \u2264 60 s, under this shop's own folder. Replaces and deletes the previous video.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2619,7 +2619,7 @@
             "description": "{ url, posterUrl, duration, title, caption }"
           },
           "422": {
-            "description": "VIDEO_INVALID (format, > 40 MB or > 60 s — the upload is deleted) or foreign publicId"
+            "description": "VIDEO_INVALID (format, > 40 MB or > 60 s \u2014 the upload is deleted) or foreign publicId"
           },
           "403": {
             "description": "Shop not approved yet"
@@ -2682,7 +2682,7 @@
             "bearerAuth": []
           }
         ],
-        "description": "Badge tiers come from DELIVERED orders (New Member 0, Explorer 1, Regular 3, Loyal Patron 6, Champion 12). Reward coupons: WELCOME10 (new customers), REGULAR5, LOYAL10, CHAMPION100 — each once per customer, unlocked by badge, and enforced again at checkout.",
+        "description": "Badge tiers come from DELIVERED orders (New Member 0, Explorer 1, Regular 3, Loyal Patron 6, Champion 12). Reward coupons: WELCOME10 (new customers), REGULAR5, LOYAL10, CHAMPION100 \u2014 each once per customer, unlocked by badge, and enforced again at checkout.",
         "responses": {
           "200": {
             "description": "{ badge, badges[], next, stats, coupons[] }"
@@ -2908,7 +2908,164 @@
             "description": "Rate limited (30/hour/user)"
           },
           "503": {
-            "description": "AI_NOT_CONFIGURED — there is no canned fallback"
+            "description": "AI_NOT_CONFIGURED \u2014 there is no canned fallback"
+          }
+        }
+      }
+    },
+    "/products/photo": {
+      "post": {
+        "tags": [
+          "Products"
+        ],
+        "summary": "Upload a product photo from the seller's gallery",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Entrepreneurs only. multipart/form-data with one `photo` file (JPEG, PNG or WebP, max 3 MB; type is checked from the bytes). Returns an https URL to send in `images` when creating the product. 60 requests/hour.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "photo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "photo"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Uploaded; data.url is the photo URL"
+          },
+          "413": {
+            "description": "Image too large"
+          },
+          "415": {
+            "description": "Not a JPEG, PNG or WebP image"
+          },
+          "503": {
+            "description": "Photo upload is not configured"
+          }
+        }
+      }
+    },
+    "/businesses/promo-ads": {
+      "get": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "A few random approved shop videos for the home screen",
+        "description": "Public. `limit` 1-8 (default 4). Only videos the admin approved, from approved shops; a different random set on every call (never cached).",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of {businessId, name, logoUrl, rating, video{url,posterUrl,title,caption,duration}}"
+          }
+        }
+      }
+    },
+    "/admin/promo-videos": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Shop videos waiting for (or past) review",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            }
+          }
+        ],
+        "description": "Admin only. Default status is pending.",
+        "responses": {
+          "200": {
+            "description": "Queue of shops with their video"
+          }
+        }
+      }
+    },
+    "/admin/businesses/{businessId}/promo-video/review": {
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Approve or reject a shop's video",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "businessId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Admin only. `action` approve or reject; reject needs a short `reason` which the owner sees.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decision saved"
           }
         }
       }

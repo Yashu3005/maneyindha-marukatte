@@ -23,7 +23,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     try {
       await ref.read(authProvider.notifier).register(
           _name.text.trim(), _email.text.trim(), _password.text, role: _role);
-      if (mounted) context.go(_role == 'entrepreneur' ? '/dashboard' : '/');
+      if (mounted) context.go(_role == 'entrepreneur' ? '/seller/onboarding/business' : '/app');
     } catch (e) {
       setState(() => _error = apiError(e));
     } finally {

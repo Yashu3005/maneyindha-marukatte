@@ -126,7 +126,7 @@ describe('shop filters', () => {
     expect(f['rating.avg']).toEqual({ $gte: 4 });
     expect(f['rating.count']).toEqual({ $gte: 1 });
     expect(f.isOpen).toBe(true);
-    expect(f['promoVideo.url']).toEqual({ $exists: true });
+    expect(f['promoVideo.review.status']).toBe('approved');
     expect(f.name.test('Asha Bakes')).toBe(false); // the ".*" is literal text, not a pattern
     expect(f.name.test('xx asha.* yy')).toBe(true);
     expect(q.sort).toHaveBeenCalledWith('-createdAt');
@@ -139,7 +139,7 @@ describe('shop filters', () => {
     find.mockClear();
     await request(app).get(`${api}/businesses?minRating=abc&openNow=false&hasVideo=no`);
     const f = find.mock.calls[0][0];
-    expect(f['rating.avg']).toBeUndefined(); expect(f.isOpen).toBeUndefined(); expect(f['promoVideo.url']).toBeUndefined();
+    expect(f['rating.avg']).toBeUndefined(); expect(f.isOpen).toBeUndefined(); expect(f['promoVideo.review.status']).toBeUndefined();
   });
   test('category by id or by name; an unknown name matches no shops', async () => {
     const { find } = listSpy();

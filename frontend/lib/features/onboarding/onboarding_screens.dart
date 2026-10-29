@@ -8,6 +8,7 @@ import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../theme/app_theme.dart';
 import '../../shared/mm_logo.dart';
+import '../../shared/keep_signed_in.dart';
 
 /// Shared olive canvas used across the Figma onboarding flow.
 class OliveScaffold extends StatelessWidget {
@@ -113,6 +114,27 @@ class LandingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
+    // Already signed in on this device (sign-in lasts 30 days and renews while you use the app):
+    // go straight in, no code needed.
+    if (auth.isLoggedIn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        final now = ref.read(authProvider); // re-check: the person may have just signed out
+        if (!now.isLoggedIn) return;
+        context.go(now.isAdmin
+            ? '/admin'
+            : (!now.profileComplete
+                ? '/onboarding/profile'
+                : (now.isEntrepreneur ? '/seller' : '/app')));
+      });
+      return OliveScaffold(
+        showBack: false,
+        child: Column(children: const [
+          SizedBox(height: 24),
+          AnimatedBrandLogo(size: 230),
+        ]),
+      );
+    }
     return OliveScaffold(
       showBack: false,
       child: Column(children: [
@@ -125,21 +147,6 @@ class LandingScreen extends ConsumerWidget {
         CreamButton(
             label: 'Get Started',
             onTap: () => context.push('/onboarding/email')),
-        if (auth.isLoggedIn) ...[
-          const SizedBox(height: 12),
-          CreamButton(
-            label: 'Continue as ${auth.name}',
-            onTap: () {
-              if (auth.isAdmin) {
-                context.go('/admin');
-              } else if (auth.isEntrepreneur) {
-                context.go('/seller');
-              } else {
-                context.go('/app');
-              }
-            },
-          ),
-        ],
         const SizedBox(height: 12),
         TextButton(
           onPressed: () => context.push('/login'),
@@ -230,6 +237,8 @@ class _EmailScreenState extends ConsumerState<EmailScreen> {
           const SizedBox(height: 10),
           Text(_error!, style: const TextStyle(color: Colors.amberAccent)),
         ],
+        const SizedBox(height: 12),
+        const KeepSignedInBox(onDark: true),
         const SizedBox(height: 24),
         CreamButton(label: _busy ? 'Sending…' : 'Send OTP', onTap: _busy ? null : _send),
       ]),

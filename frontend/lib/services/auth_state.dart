@@ -32,7 +32,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> _saveUser(Map<String, dynamic> user) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user', jsonEncode(user));
+    if (TokenStore.remember) {
+      await prefs.setString('user', jsonEncode(user));
+    } else {
+      await prefs.remove('user');
+    }
     state = AuthState(user: user);
   }
 
@@ -117,17 +121,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
-    // Revoke the server-side session first (best effort), then clear local state.
+    // Clear this device first, so the app never thinks you are still signed in while the network call runs;
+    // then revoke the server-side session (best effort).
     final refresh = TokenStore.refreshToken;
+    state = const AuthState(); // synchronous: screens that react to sign-out see it immediately
+    await TokenStore.save(null);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('user');
     if (refresh != null) {
       try {
         await ApiClient.dio.post('/auth/logout', data: {'refreshToken': refresh});
       } catch (_) {}
     }
-    await TokenStore.save(null);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('user');
-    state = const AuthState();
   }
 }
 

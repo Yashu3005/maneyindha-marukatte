@@ -122,7 +122,7 @@ exports.getStats = async (now = new Date()) => {
     User.aggregate([{ $match: { ...people, createdAt: { $gte: since } } }, { $group: { _id: perDay(), count: { $sum: 1 } } }]),
 
     Business.aggregate([{ $match: { isActive: true } }, { $group: { _id: '$verification.status', n: { $sum: 1 } } }]),
-    Business.countDocuments({ isActive: true, 'verification.status': 'approved', 'promoVideo.publicId': { $exists: true } }),
+    Business.countDocuments({ isActive: true, 'verification.status': 'approved', 'promoVideo.review.status': 'approved' }),
     Business.countDocuments({ isActive: true, 'verification.status': 'approved', isOpen: true }),
 
     Order.aggregate([{ $group: { _id: '$status', n: { $sum: 1 }, amount: { $sum: '$amounts.total' } } }]),
