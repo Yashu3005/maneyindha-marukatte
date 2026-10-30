@@ -17,9 +17,9 @@ router.get('/users',
     limit: Joi.number().integer().min(1).max(100),
   }), 'query'),
   adminController.listUsers);
-router.patch('/users/:id/status',
-  validate(Joi.object({ isActive: Joi.boolean().required() })),
-  adminController.setUserStatus);
+const statusBody = Joi.object({ isActive: Joi.boolean().required(), reason: Joi.string().trim().max(300).allow('') });
+router.patch('/users/:id/status', validate(statusBody), adminController.setUserStatus);
+router.patch('/businesses/:businessId/status', validate(statusBody), adminController.setBusinessStatus);
 
 router.get('/verifications',
   validate(Joi.object({
@@ -48,5 +48,18 @@ router.post('/businesses/:businessId/promo-video/review',
 
 // Take down a shop's promo video (e.g. unsuitable content). The owner can upload a new one.
 router.delete('/businesses/:businessId/promo-video', adminController.removePromoVideo);
+
+// Read-only views for the administrator.
+const listQuery = {
+  q: Joi.string().trim().max(60).allow(''),
+  page: Joi.number().integer().min(1),
+  limit: Joi.number().integer().min(1).max(100),
+};
+router.get('/owners', validate(Joi.object(listQuery), 'query'), adminController.owners);
+router.get('/owners/:id', adminController.ownerDetail);
+router.get('/shops', validate(Joi.object({ ...listQuery, status: Joi.string().valid('approved', 'in_review', 'pending', 'rejected', 'suspended') }), 'query'), adminController.shops);
+router.get('/products', validate(Joi.object({ ...listQuery, business: Joi.string().hex().length(24) }), 'query'), adminController.products);
+router.get('/badges', adminController.badges);
+router.get('/growth', validate(Joi.object({ months: Joi.number().integer().min(3).max(12) }), 'query'), adminController.growth);
 
 module.exports = router;

@@ -5,6 +5,7 @@ const AppError = require('../utils/AppError');
 const { parsePage, isObjectId } = require('../utils/pagination');
 const { slugify } = require('../utils/slug');
 const { haversineKm } = require('../utils/geo');
+const { coverOf } = require('../utils/shopPhoto');
 
 // Public responses must never carry ID-proof/document URLs or reviewer internals.
 const PUBLIC_EXCLUDE = '-verification.documents -verification.reviewedBy -verification.rejectionReason -location';
@@ -17,6 +18,7 @@ function toPublic(doc, from) {
   delete out.location;
   delete out.publicLocation;
   delete out.locationSource;
+  out.coverUrl = coverOf(out); // one consistent picture per shop for cards and lists
   if (out.promoVideo) {
     out.promoVideo = out.promoVideo.url && out.promoVideo.review?.status === 'approved'
       ? { url: out.promoVideo.url, posterUrl: out.promoVideo.posterUrl, duration: out.promoVideo.duration,
@@ -191,19 +193,25 @@ exports.list = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 
-// Home-screen ads: a few random approved shop videos, different on every visit.
+exports.photoSet = async (req, res, next) => {
+  try { ok(res, await require('../services/shopPhoto.service').setCover(req.user.id, req.params.id, req.file)); } catch (e) { next(e); }
+};
+exports.photoRemove = async (req, res, next) => {
+  try { ok(res, await require('../services/shopPhoto.service').removeCover(req.user.id, req.params.id)); } catch (e) { next(e); }
+};
+
+// Home-screen featured videos: the best-rated shops with an approved video (at most 3).
 exports.promoAds = async (req, res, next) => {
   try {
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 4, 1), 8);
-    res.set('Cache-Control', 'no-store');
-    ok(res, await require('../services/promoVideo.service').randomApprovedAds(limit));
+    res.set('Cache-Control', 'public, max-age=60'); // the home screen asks once; ratings change slowly
+    ok(res, await require('../services/promoVideo.service').featuredVideos(req.query.limit));
   } catch (e) { next(e); }
 };
 
 exports.mine = async (req, res, next) => {
   try {
     const items = await Business
-      .find({ owner: req.user.id, isActive: true })
+      .find({ owner: req.user.id, $or: [{ isActive: true }, { 'suspension.at': { $ne: null } }] }) // a suspended shop stays visible to its owner
       .populate('category', 'name');
     ok(res, items);
   } catch (e) { next(e); }

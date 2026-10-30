@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart' show DioException;
 import 'package:flutter/material.dart';
+import '../../l10n/language_picker.dart';
+import '../../l10n/app_strings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
@@ -26,6 +28,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       await ref.read(authProvider.notifier).login(_email.text.trim(), _password.text);
       ref.invalidate(myBusinessesProvider);
       ref.invalidate(ordersProvider);
+      ref.invalidate(receivedOrdersProvider);
       ref.invalidate(cartProvider);
       if (mounted) {
         final auth = ref.read(authProvider);
@@ -64,15 +67,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const AnimatedBrandLogo(size: 150),
               const SizedBox(height: 4),
-              Text('Made nearby, with love',
+              Text(context.tr('Made nearby, with love'),
                   style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 24),
               TextField(controller: _email,
-                  decoration: const InputDecoration(labelText: 'Email or username')),
+                  decoration: InputDecoration(labelText: context.tr('Email or username'))),
               const SizedBox(height: 12),
               TextField(controller: _password, obscureText: true,
                   onSubmitted: (_) => _submit(),
-                  decoration: const InputDecoration(labelText: 'Password')),
+                  decoration: InputDecoration(labelText: context.tr('Password'))),
               const SizedBox(height: 4),
               const Align(alignment: Alignment.centerLeft, child: KeepSignedInBox()),
               if (_error != null) ...[
@@ -83,12 +86,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               SizedBox(width: double.infinity,
                 child: FilledButton(
                   onPressed: _busy ? null : _submit,
-                  child: Text(_busy ? 'Signing in…' : 'Sign in'),
+                  child: Text(context.tr(_busy ? 'Signing in…' : 'Sign in')),
                 )),
               TextButton(
                 onPressed: () => context.push('/register'),
-                child: const Text('New here? Create an account'),
+                child: Text(context.tr('New here? Create an account')),
               ),
+              const LanguageButton(),
             ]),
           ),
         ),

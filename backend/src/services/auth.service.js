@@ -56,7 +56,7 @@ exports.login = async ({ email, phone, username, password }) => {
   if (!user || !(await bcrypt.compare(password, user.passwordHash || ''))) {
     throw new AppError('Invalid credentials', 401);
   }
-  if (user.isActive === false) throw new AppError('Account disabled', 403);
+  if (user.isActive === false) throw new AppError('Your account has been suspended. Please contact support.', 403, 'ACCOUNT_SUSPENDED');
   // The administrator signs in only through /auth/admin/login (credentials held in server configuration).
   if (PRIVILEGED_ROLES.includes(user.role)) throw new AppError('Invalid credentials', 401);
   return { user: sanitize(user), ...(await issueSession(user)) };
@@ -109,7 +109,7 @@ exports.verifyOtp = async ({ email, otp }) => {
     user.emailVerified = true;
     await user.save();
   }
-  if (!user.isActive) throw new AppError('Account disabled', 403);
+  if (!user.isActive) throw new AppError('Your account has been suspended. Please contact support.', 403, 'ACCOUNT_SUSPENDED');
   // Email-OTP must never be a way into privileged accounts.
   if (PRIVILEGED_ROLES.includes(user.role)) throw new AppError('Use password login for this account', 403);
   return { user: sanitize(user), ...(await issueSession(user)), isNewUser };
@@ -137,6 +137,6 @@ exports.exchangeFirebaseToken = async ({ idToken, role, name }) => {
       role: safeRole,
     });
   }
-  if (!user.isActive) throw new AppError('Account disabled', 403);
+  if (!user.isActive) throw new AppError('Your account has been suspended. Please contact support.', 403, 'ACCOUNT_SUSPENDED');
   return { user: sanitize(user), ...(await issueSession(user)) };
 };

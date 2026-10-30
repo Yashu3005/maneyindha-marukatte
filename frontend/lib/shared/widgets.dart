@@ -49,15 +49,23 @@ class EmptyView extends StatelessWidget {
       );
 }
 
+/// The picture that represents a shop: the server's `coverUrl`, else its cover/logo. Null when the shop has none.
+String? shopCover(Map? shop) {
+  for (final k in const ['coverUrl', 'bannerUrl', 'logoUrl']) {
+    final v = shop?[k]?.toString();
+    if (v != null && v.startsWith('https://')) return v;
+  }
+  return null;
+}
+
 class NetImage extends StatelessWidget {
   final String? url;
   final double? height;
   final double? width;
   const NetImage(this.url, {super.key, this.height, this.width});
-  @override
-  Widget build(BuildContext context) {
-    if (url == null || url!.isEmpty) {
-      return Container(
+
+  // The same soft placeholder for "no photo" and "photo could not load", so cards never show a broken image.
+  Widget _placeholder() => Container(
         height: height, width: width,
         decoration: const BoxDecoration(gradient: LinearGradient(
           begin: Alignment.topLeft, end: Alignment.bottomRight,
@@ -65,13 +73,21 @@ class NetImage extends StatelessWidget {
         )),
         child: const Icon(Icons.storefront, color: MMColors.olive),
       );
-    }
-    return Image.network(url!, height: height, width: width, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(
-              height: height, width: width,
-              color: Theme.of(context).colorScheme.secondaryContainer,
-              child: const Icon(Icons.image_not_supported),
-            ));
+
+  @override
+  Widget build(BuildContext context) {
+    if (url == null || url!.isEmpty) return _placeholder();
+    return Image.network(
+      url!, height: height, width: width, fit: BoxFit.cover,
+      // Keeps the card's size steady while the picture downloads (no layout jump).
+      loadingBuilder: (context, child, progress) => progress == null
+          ? child
+          : Container(
+              height: height, width: width, color: MMColors.sage.withOpacity(0.35),
+              child: const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+            ),
+      errorBuilder: (_, __, ___) => _placeholder(),
+    );
   }
 }
 

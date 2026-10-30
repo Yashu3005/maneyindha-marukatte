@@ -33,6 +33,7 @@ const userSchema = new mongoose.Schema(
     ],
     fcmTokens: [String],
     isActive: { type: Boolean, default: true },
+    suspension: { reason: { type: String, maxlength: 300 }, at: Date },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true }

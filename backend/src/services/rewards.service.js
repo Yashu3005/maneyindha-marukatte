@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 const Coupon = require('../models/Coupon');
+const Business = require('../models/Business');
 const Order = require('../models/Order');
 
-// Loyalty programme. Badges come from how many orders a customer has actually had DELIVERED (and how recently);
-// reward coupons unlock with those badges. Nothing here is hand-picked per user, and every number comes from real orders.
+// Customer rewards. Coupons unlock by how many orders a customer has actually had DELIVERED (and how recently).
+// (Badges belong to the entrepreneurs; see getSellerBadges below.) Nothing here is hand-picked per user, and every number comes from real orders.
 const TIERS = [
   { id: 'new', label: 'New Member', min: 0, icon: '🌱', blurb: 'Welcome! Your first delivered order earns your first badge.' },
   { id: 'explorer', label: 'Explorer', min: 1, icon: '🧭', blurb: 'You have tried your first home-made treat.' },
@@ -15,11 +16,11 @@ const TIERS = [
 const PROGRAMME = [
   { code: 'WELCOME10', title: 'Welcome offer', description: '10% off your first order (up to ₹50)',
     type: 'percent', value: 10, maxDiscount: 50, minOrderAmount: 100, maxDeliveredOrders: 0, audience: 'new' },
-  { code: 'REGULAR5', title: 'Regular customer reward', description: '5% off (up to ₹40) — for Regulars',
+  { code: 'REGULAR5', title: 'Reward after 3 orders', description: '5% off (up to ₹40) — after 3 delivered orders',
     type: 'percent', value: 5, maxDiscount: 40, minOrderAmount: 150, minDeliveredOrders: 3, audience: 'regular' },
-  { code: 'LOYAL10', title: 'Loyal Patron reward', description: '10% off (up to ₹75) — for Loyal Patrons',
+  { code: 'LOYAL10', title: 'Reward after 6 orders', description: '10% off (up to ₹75) — after 6 delivered orders',
     type: 'percent', value: 10, maxDiscount: 75, minOrderAmount: 200, minDeliveredOrders: 6, audience: 'regular' },
-  { code: 'CHAMPION100', title: 'Champion reward', description: '₹100 off orders above ₹300 — for Champions',
+  { code: 'CHAMPION100', title: 'Reward after 12 orders', description: '₹100 off orders above ₹300 — after 12 delivered orders',
     type: 'flat', value: 100, minOrderAmount: 300, minDeliveredOrders: 12, audience: 'regular' },
 ];
 
@@ -33,9 +34,12 @@ exports.ensureRewardCoupons = async () => {
   await Promise.all(PROGRAMME.map((p) => {
     const doc = { ...p };
     delete doc.audience; // audience is a label for the UI, not a stored field
+    const { title, description } = doc;
+    delete doc.title; delete doc.description;
     return Coupon.updateOne(
       { code: p.code },
-      { $setOnInsert: { ...doc, isReward: true, usageLimitPerUser: 1, isActive: true } },
+      // Only the wording is refreshed; amounts, limits and anything an admin edited stay as they are.
+      { $set: { title, description }, $setOnInsert: { ...doc, isReward: true, usageLimitPerUser: 1, isActive: true } },
       { upsert: true }
     );
   }));
@@ -117,5 +121,43 @@ exports.getRewards = async (customerId, now = new Date()) => {
       memberSince: stats.firstOrderAt,
     },
     coupons: list,
+  };
+};
+
+// ---- Entrepreneur badges -------------------------------------------------------------------------
+// Badges are for the women entrepreneurs: they come from orders their shops have actually DELIVERED, plus
+// a couple of achievements (customer ratings, an approved shop video). Customers earn coupons, not badges.
+const SELLER_TIERS = [
+  { id: 'new_maker', label: 'New Entrepreneur', min: 0, icon: '🌱', blurb: 'Welcome! Your first delivered order earns your first badge.' },
+  { id: 'first_sale', label: 'First Sale', min: 1, icon: '🎉', blurb: 'Your first order reached a happy customer.' },
+  { id: 'rising', label: 'Rising Maker', min: 10, icon: '🌟', blurb: 'Customers are coming back for your products.' },
+  { id: 'trusted', label: 'Trusted Maker', min: 30, icon: '🤝', blurb: 'A name your neighbourhood trusts.' },
+  { id: 'star', label: 'Star Entrepreneur', min: 100, icon: '🏆', blurb: 'One of our most successful home businesses.' },
+];
+exports.SELLER_TIERS = SELLER_TIERS;
+exports.sellerTierFor = (delivered) => [...SELLER_TIERS].reverse().find((t) => delivered >= t.min) || SELLER_TIERS[0];
+
+exports.getSellerBadges = async (ownerId) => {
+  const shops = await Business.find({ owner: ownerId, isActive: true }).select('rating promoVideo').lean();
+  const ids = shops.map((s) => s._id);
+  const delivered = ids.length ? await Order.countDocuments({ business: { $in: ids }, status: 'delivered' }) : 0;
+
+  let ratingCount = 0; let ratingSum = 0;
+  for (const s of shops) { ratingCount += s.rating?.count || 0; ratingSum += (s.rating?.avg || 0) * (s.rating?.count || 0); }
+  const ratingAvg = ratingCount ? Math.round((ratingSum / ratingCount) * 10) / 10 : 0;
+  const hasVideo = shops.some((s) => s.promoVideo?.review?.status === 'approved');
+
+  const tier = exports.sellerTierFor(delivered);
+  const next = SELLER_TIERS.find((t) => t.min > delivered) || null;
+  return {
+    badge: { id: tier.id, label: tier.label, icon: tier.icon, blurb: tier.blurb },
+    badges: SELLER_TIERS.map((t) => ({ id: t.id, label: t.label, icon: t.icon, min: t.min, earned: delivered >= t.min })),
+    next: next ? { id: next.id, label: next.label, icon: next.icon, ordersToGo: next.min - delivered } : null,
+    achievements: [
+      { id: 'well_rated', label: 'Highly Rated', icon: '⭐', earned: ratingCount >= 5 && ratingAvg >= 4.5,
+        hint: 'An average of 4.5★ or more from at least 5 reviews' },
+      { id: 'on_video', label: 'On Camera', icon: '🎬', earned: hasVideo, hint: 'Get a shop video approved by the admin' },
+    ],
+    stats: { deliveredOrders: delivered, rating: { avg: ratingAvg, count: ratingCount } },
   };
 };

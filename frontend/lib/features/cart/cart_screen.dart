@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/app_strings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
@@ -104,18 +105,18 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final auth = ref.watch(authProvider);
     if (!auth.isLoggedIn) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Cart')),
+        appBar: AppBar(title: Text(context.tr('Cart'))),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.shopping_bag_outlined, size: 64, color: MMColors.olive),
               const SizedBox(height: 12),
-              Text('Sign in to see your cart', style: serif(20)),
+              Text(context.tr('Sign in to see your cart'), style: serif(20)),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () => context.push('/login'),
-                child: const Text('Sign in'),
+                child: Text(context.tr('Sign in')),
               ),
             ]),
           ),
@@ -126,7 +127,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final cart = ref.watch(cartProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cart'),
+        title: Text(context.tr('Cart')),
         actions: [
           if (cart.valueOrNull != null && ((cart.valueOrNull!['items'] as List?) ?? []).isNotEmpty)
             TextButton.icon(
@@ -156,13 +157,13 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                     child: const Icon(Icons.shopping_basket_outlined, size: 54, color: MMColors.clay),
                   ),
                   const SizedBox(height: 16),
-                  Text('Your cart is empty', style: serif(22)),
+                  Text(context.tr('Your cart is empty'), style: serif(22)),
                   const SizedBox(height: 6),
-                  const Text('Add something delicious from a nearby shop.', textAlign: TextAlign.center),
+                  Text(context.tr('Add something delicious from a nearby shop.'), textAlign: TextAlign.center),
                   const SizedBox(height: 18),
                   FilledButton(
                     onPressed: () => context.go('/app'),
-                    child: const Text('Browse shops'),
+                    child: Text(context.tr('Browse shops')),
                   ),
                 ]),
               ),
@@ -238,7 +239,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          FilledButton.tonal(onPressed: () => _applyCoupon(), child: const Text('Apply')),
+                          FilledButton.tonal(onPressed: () => _applyCoupon(), child: Text(context.tr('Apply'))),
                         ]),
                       ),
                       _RewardChips(onApply: _applyCoupon),
@@ -270,7 +271,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                       constraints: const BoxConstraints(maxWidth: 720),
                       child: Row(children: [
                         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Total', style: TextStyle(fontSize: 12)),
+                          Text(context.tr('Total'), style: const TextStyle(fontSize: 12)),
                           Text(rupees(total), style: serif(22)),
                         ]),
                         const SizedBox(width: 20),
@@ -278,7 +279,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           child: FilledButton.icon(
                             onPressed: _busy ? null : () => context.push('/checkout'),
                             icon: const Icon(Icons.arrow_forward),
-                            label: const Text('Checkout'),
+                            label: Text(context.tr('Checkout')),
                           ),
                         ),
                       ]),

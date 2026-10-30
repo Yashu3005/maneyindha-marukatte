@@ -7,6 +7,8 @@ import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
 import 'admin_dashboard.dart';
+import 'admin_insights.dart';
+import 'admin_style.dart';
 import 'promo_videos_tab.dart';
 
 /// Applications tab: documents + approve/reject. Only submitted (in_review) applications can be approved.
@@ -147,7 +149,7 @@ class _ApplicationsTabState extends ConsumerState<ApplicationsTab> {
                               leading: ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: SizedBox(width: 48, height: 48,
-                                    child: NetImage(b['logoUrl']?.toString())),
+                                    child: NetImage(shopCover(b))),
                               ),
                               title: Row(children: [
                                 Flexible(child: Text(b['name']?.toString() ?? '')),
@@ -221,7 +223,7 @@ class AdminScreen extends ConsumerWidget {
       );
     }
     return DefaultTabController(
-      length: 4,
+      length: 9,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Administrator'),
@@ -233,6 +235,7 @@ class AdminScreen extends ConsumerWidget {
                 ref.invalidate(adminStatsProvider);
                 ref.invalidate(adminBusinessesProvider);
                 ref.invalidate(adminUsersProvider);
+                ref.read(adminRefreshProvider.notifier).state++;
               },
             ),
             IconButton(
@@ -245,8 +248,13 @@ class AdminScreen extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
           ],
-          bottom: const TabBar(tabs: [
+          bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
             Tab(text: 'Overview'),
+            Tab(text: 'Growth'),
+            Tab(text: 'Owners'),
+            Tab(text: 'Shops'),
+            Tab(text: 'Products'),
+            Tab(text: 'Badges'),
             Tab(text: 'Applications'),
             Tab(text: 'Members'),
             Tab(text: 'Videos'),
@@ -254,6 +262,11 @@ class AdminScreen extends ConsumerWidget {
         ),
         body: const TabBarView(children: [
           AdminOverviewTab(),
+          AdminGrowthTab(),
+          AdminOwnersTab(),
+          AdminShopsTab(),
+          AdminProductsTab(),
+          AdminBadgesTab(),
           ApplicationsTab(),
           AdminMembersTab(),
           PromoVideosTab(),

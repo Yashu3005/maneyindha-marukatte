@@ -11,6 +11,15 @@ const { VALID_TRANSITIONS } = require('../models/Order');
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
 
+// Self-pickup orders never travel: once ready, the customer collects it and the shop marks it collected
+// (stored as 'delivered' so ratings and rewards work the same way).
+const PICKUP_TRANSITIONS = { ...VALID_TRANSITIONS, ready: ['delivered'] };
+
+// While Razorpay runs in TEST mode no real money moves, so shops may confirm an order whose payment is still
+// pending. It switches itself off with live keys (rzp_live_...); ALLOW_CONFIRM_WITHOUT_PAYMENT=true forces it on.
+const paymentGateOpen = () =>
+  process.env.ALLOW_CONFIRM_WITHOUT_PAYMENT === 'true' || /^rzp_test_/.test(process.env.RAZORPAY_KEY_ID || '');
+
 // Statuses each participant may move an order INTO. Whether the move is legal
 // from the current state is decided separately by VALID_TRANSITIONS.
 const OWNER_TARGETS = ['confirmed', 'rejected', 'cancelled', 'preparing', 'ready', 'picked_up', 'out_for_delivery', 'delivered'];
@@ -120,18 +129,22 @@ exports.createOrder = async (customerId, { businessId, items, deliveryAddress, i
   return order;
 };
 
+// Orders the user PLACED. An entrepreneur who shops as a customer sees their purchases here, never shop orders.
 exports.ordersForUser = async (user) => {
-  let filter;
-  if (user.role === 'entrepreneur') {
-    const owned = await Business.find({ owner: user.id }).select('_id');
-    // Orders received by their shops + orders they placed while shopping
-    filter = { $or: [{ business: { $in: owned.map((b) => b._id) } }, { customer: user.id }] };
-  } else if (user.role === 'delivery_partner') {
-    filter = { deliveryPartner: user.id };
-  } else {
-    filter = { customer: user.id };
-  }
-  return Order.find(filter).sort('-createdAt').limit(50).populate('business', 'name');
+  const filter = user.role === 'delivery_partner' ? { deliveryPartner: user.id } : { customer: user.id };
+  return Order.find(filter).sort('-createdAt').limit(50).populate('business', 'name').populate('items.product', 'images');
+};
+
+// Orders RECEIVED by the shops this user owns (and nothing else), with who to hand each one to.
+// Shop owners get the customer's name and phone only, never the email.
+exports.receivedOrders = async (user) => {
+  const owned = await Business.find({ owner: user.id }).select('_id');
+  if (!owned.length) return [];
+  return Order.find({ business: { $in: owned.map((b) => b._id) } })
+    .sort('-createdAt').limit(100)
+    .populate('business', 'name')
+    .populate('items.product', 'images')
+    .populate('customer', 'name phone');
 };
 
 exports.transition = async (orderId, nextStatus, user) => {
@@ -156,10 +169,11 @@ exports.transition = async (orderId, nextStatus, user) => {
 
   // An online-payment order is only accepted by the shop once the payment is confirmed (server-side).
   if (nextStatus === 'confirmed' && order.payment?.method === 'razorpay' && order.payment.status !== 'paid') {
-    throw new AppError('Payment for this order has not been confirmed yet', 409, 'PAYMENT_PENDING');
+    if (!paymentGateOpen()) throw new AppError('Payment for this order has not been confirmed yet', 409, 'PAYMENT_PENDING');
+    logger.warn(`Order ${order._id} confirmed without a confirmed payment (payment test mode)`);
   }
 
-  const allowed = VALID_TRANSITIONS[order.status] || [];
+  const allowed = (order.isSelfPickup ? PICKUP_TRANSITIONS : VALID_TRANSITIONS)[order.status] || [];
   if (!allowed.includes(nextStatus)) {
     throw new AppError(`Invalid transition ${order.status} -> ${nextStatus}`, 422);
   }

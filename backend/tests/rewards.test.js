@@ -35,7 +35,9 @@ describe('reward coupons', () => {
     for (const [filter, update, opts] of upd.mock.calls) {
       expect(filter).toEqual({ code: expect.any(String) });
       expect(opts).toEqual({ upsert: true });
-      expect(Object.keys(update)).toEqual(['$setOnInsert']);
+      expect(Object.keys(update).sort()).toEqual(['$set', '$setOnInsert']);
+      expect(Object.keys(update.$set).sort()).toEqual(['description', 'title']);
+      expect(update.$setOnInsert.title).toBeUndefined();
       expect(update.$setOnInsert).toMatchObject({ isReward: true, usageLimitPerUser: 1, isActive: true });
       expect(update.$setOnInsert.audience).toBeUndefined();
     }
@@ -157,5 +159,45 @@ describe('checkout enforces eligibility (a locked code cannot be typed in)', () 
     const count = jest.spyOn(Order, 'countDocuments').mockResolvedValue(0);
     await expect(check('DIWALI')).resolves.toMatchObject({ code: 'DIWALI' });
     expect(count.mock.calls.every(([q]) => q.status !== 'delivered')).toBe(true);
+  });
+});
+
+describe('entrepreneur badges', () => {
+  const Business = require('../src/models/Business');
+  const chain = (rows) => ({ select: () => ({ lean: async () => rows }) });
+  test.each([
+    [0, 'new_maker'], [1, 'first_sale'], [9, 'first_sale'], [10, 'rising'], [30, 'trusted'], [99, 'trusted'], [100, 'star'],
+  ])('%i delivered orders -> %s', (n, id) => expect(rewards.sellerTierFor(n).id).toBe(id));
+
+  test('GET /rewards/seller counts only delivered orders of the owner\'s shops, with achievements', async () => {
+    const shopId = oid();
+    jest.spyOn(Business, 'find').mockReturnValue(chain([
+      { _id: shopId, rating: { avg: 4.6, count: 8 }, promoVideo: { review: { status: 'approved' } } },
+    ]));
+    const count = jest.spyOn(Order, 'countDocuments').mockResolvedValue(12);
+    const res = await request(app).get('/api/v1/rewards/seller').set(bearer('entrepreneur'));
+    expect(res.status).toBe(200);
+    expect(count).toHaveBeenCalledWith({ business: { $in: [shopId] }, status: 'delivered' });
+    expect(res.body.data.badge.id).toBe('rising');
+    expect(res.body.data.next).toMatchObject({ id: 'trusted', ordersToGo: 18 });
+    expect(res.body.data.achievements.filter((a) => a.earned).map((a) => a.id)).toEqual(['well_rated', 'on_video']);
+    expect(res.body.data.stats).toEqual({ deliveredOrders: 12, rating: { avg: 4.6, count: 8 } });
+  });
+  test('a pending video or few reviews earn no achievement; no shop means no orders query', async () => {
+    jest.spyOn(Business, 'find').mockReturnValue(chain([
+      { _id: oid(), rating: { avg: 5, count: 2 }, promoVideo: { review: { status: 'pending' } } },
+    ]));
+    jest.spyOn(Order, 'countDocuments').mockResolvedValue(0);
+    const a = (await request(app).get('/api/v1/rewards/seller').set(bearer('entrepreneur'))).body.data;
+    expect(a.achievements.every((x) => !x.earned)).toBe(true);
+    jest.spyOn(Business, 'find').mockReturnValue(chain([]));
+    Order.countDocuments.mockClear();
+    const b = (await request(app).get('/api/v1/rewards/seller').set(bearer('entrepreneur'))).body.data;
+    expect(b.badge.id).toBe('new_maker');
+    expect(Order.countDocuments).not.toHaveBeenCalled();
+  });
+  test('customers and signed-out visitors cannot use it', async () => {
+    expect((await request(app).get('/api/v1/rewards/seller').set(bearer('customer'))).status).toBe(403);
+    expect((await request(app).get('/api/v1/rewards/seller')).status).toBe(401);
   });
 });

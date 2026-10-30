@@ -209,3 +209,32 @@ describe('transition authorization', () => {
     expect(Coupon.updateOne).toHaveBeenCalledWith({ _id: couponId, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } });
   });
 });
+
+describe('order lists: placed vs received', () => {
+  const Business = require('../src/models/Business');
+  const run = async (fn, role, owned = [{ _id: 'shopA' }]) => {
+    const calls = [];
+    const finds = [];
+    const q = { sort: () => q, limit: () => q, populate: (...a) => { calls.push(a); return q; }, then: (res) => res([]) };
+    jest.spyOn(Order, 'find').mockImplementation((f) => { finds.push(f); return q; });
+    jest.spyOn(Business, 'find').mockReturnValue({ select: async () => owned });
+    await orderService[fn]({ id: 'u1', role });
+    return { calls, finds };
+  };
+  test('"my orders" is only what the user placed, even for a shop owner, and never exposes other customers', async () => {
+    const r = await run('ordersForUser', 'entrepreneur');
+    expect(r.finds).toEqual([{ customer: 'u1' }]);
+    expect(r.calls).not.toContainEqual(['customer', 'name phone']);
+    expect((await run('ordersForUser', 'customer')).finds).toEqual([{ customer: 'u1' }]);
+    expect((await run('ordersForUser', 'delivery_partner')).finds).toEqual([{ deliveryPartner: 'u1' }]);
+  });
+  test('"received" is only orders for the owner\'s own shops, with the customer name and phone', async () => {
+    const r = await run('receivedOrders', 'entrepreneur', [{ _id: 'shopA' }, { _id: 'shopB' }]);
+    expect(r.finds).toEqual([{ business: { $in: ['shopA', 'shopB'] } }]);
+    expect(r.calls).toContainEqual(['customer', 'name phone']);
+  });
+  test('an owner with no shop receives nothing (and no order query runs)', async () => {
+    const r = await run('receivedOrders', 'entrepreneur', []);
+    expect(r.finds).toEqual([]);
+  });
+});

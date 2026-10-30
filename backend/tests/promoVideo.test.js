@@ -49,7 +49,7 @@ describe('signature', () => {
     const signed = { ...fields }; const { signature } = fields;
     delete signed.signature; delete signed.api_key;
     expect(signature).toBe(cloudinary.utils.api_sign_request(signed, 'shh-secret'));
-    expect(limits).toEqual({ maxBytes: 40 * 1024 * 1024, maxSeconds: 60, formats: ['mp4', 'mov', 'webm'] });
+    expect(limits).toEqual({ maxBytes: 100 * 1024 * 1024, maxSeconds: 60, formats: ['mp4', 'mov', 'webm'] });
     expect(JSON.stringify(res.body)).not.toContain('shh-secret');
   });
   test('a new public id each time', async () => {
@@ -90,9 +90,9 @@ describe('attach (the server checks what was uploaded)', () => {
   });
   test.each([
     ['too long', { duration: 61.2 }, /60 seconds/],
-    ['too big', { bytes: 40 * 1024 * 1024 + 1 }, /40 MB/],
+    ['too big', { bytes: 100 * 1024 * 1024 + 1 }, /100 MB/],
     ['wrong format', { format: 'avi' }, /MP4, MOV or WebM/],
-    ['empty', { bytes: 0 }, /40 MB/],
+    ['empty', { bytes: 0 }, /100 MB/],
     ['no duration', { duration: 0 }, /60 seconds/],
   ])('rejects a video that is %s and deletes the upload', async (_n, patch, msg) => {
     remote = { ...GOOD_INFO, ...patch };
@@ -103,9 +103,18 @@ describe('attach (the server checks what was uploaded)', () => {
     expect(destroyed).toEqual([pid()]);
     expect(biz.promoVideo?.url).toBeUndefined();
   });
-  test('boundary values are accepted: exactly 60 s and exactly 40 MB', async () => {
-    remote = { format: 'webm', bytes: 40 * 1024 * 1024, duration: 60 };
+  test('boundary values are accepted: exactly 60 s and exactly 100 MB', async () => {
+    remote = { format: 'webm', bytes: 100 * 1024 * 1024, duration: 60 };
     expect((await attach({ publicId: pid() })).status).toBe(200);
+  });
+  test('a video whose length Cloudinary does not report yet is accepted (size still checked), with a warning', async () => {
+    remote = { format: 'mp4', bytes: 3 * 1024 * 1024 };
+    const res = await attach({ publicId: pid() });
+    expect(res.status).toBe(200);
+    expect(res.body.data.duration).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('length not reported'));
+    remote = { format: 'mp4', bytes: 3 * 1024 * 1024, video: { duration: 12.34 } };
+    expect((await attach({ publicId: pid('b'.repeat(24)) })).body.data.duration).toBe(12.3);
   });
   test('a public id from another shop or another folder is refused before Cloudinary is asked', async () => {
     for (const bad of [`promo/${oid()}/${'a'.repeat(24)}`, `verification/${bizId}/${'a'.repeat(24)}`, `promo/${bizId}/../x`, `promo/${bizId}/short`, '']) {
@@ -215,19 +224,50 @@ describe('admin review and home ads', () => {
     expect(JSON.stringify(find.mock.calls[0][0])).toContain('pending');
     expect((await request(app).get(`${api}/admin/promo-videos`).set(bearer('customer'))).status).toBe(403);
   });
-  test('home ads: public, at most the asked count, only approved videos from approved shops, never cached', async () => {
-    const agg = jest.spyOn(Business, 'aggregate').mockResolvedValue([
-      { _id: biz._id, name: 'Asha Bakes', rating: { avg: 4.5, count: 3 }, promoVideo: { url: 'https://res.cloudinary.com/demo/video/upload/x.mp4', posterUrl: 'https://res.cloudinary.com/demo/video/upload/x.jpg', title: 'Hi', duration: 12 } },
-    ]);
-    const res = await request(app).get(`${api}/businesses/promo-ads?limit=4`);
-    expect(res.status).toBe(200);
-    expect(res.headers['cache-control']).toMatch(/no-store/);
-    expect(res.body.data[0]).toMatchObject({ businessId: String(biz._id), name: 'Asha Bakes', video: { url: expect.stringMatching(/^https:/) } });
-    const pipeline = agg.mock.calls[0][0];
-    expect(JSON.stringify(pipeline[0])).toContain('"promoVideo.review.status":"approved"');
-    expect(JSON.stringify(pipeline[0])).toContain('"verification.status":"approved"');
-    expect(pipeline[1]).toEqual({ $sample: { size: 4 } });
-    await request(app).get(`${api}/businesses/promo-ads?limit=99`);
-    expect(agg.mock.calls[1][0][1]).toEqual({ $sample: { size: 8 } });
+  describe('featured videos: best-rated shops first', () => {
+    const shop = (name, avg, count, extra = {}) => ({
+      _id: oid(), name, rating: { avg, count }, bannerUrl: `https://res.cloudinary.com/demo/image/upload/${name}.jpg`,
+      promoVideo: { url: `https://res.cloudinary.com/demo/video/upload/${name}.mp4`, posterUrl: `https://res.cloudinary.com/demo/video/upload/${name}.jpg`, review: { status: 'approved' } }, ...extra,
+    });
+    const feature = async (rows, q = '') => {
+      const chain = { select: () => chain, limit: () => chain, lean: async () => rows };
+      const find = jest.spyOn(Business, 'find').mockReturnValue(chain);
+      const res = await request(app).get(`${api}/businesses/promo-ads${q}`);
+      return { res, find };
+    };
+    test('public, only eligible shops are asked for, and at most three come back', async () => {
+      const { res, find } = await feature([shop('a', 4.9, 40), shop('b', 4.8, 30), shop('c', 4.7, 20), shop('d', 4.6, 10), shop('e', 4.5, 9)], '?limit=99');
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(3);
+      const f = find.mock.calls[0][0];
+      expect(f).toMatchObject({ isActive: true, deletedAt: null, 'verification.status': 'approved', 'promoVideo.review.status': 'approved' });
+      expect(res.headers['cache-control']).toMatch(/max-age=60/);
+    });
+    test('ranked by rating, with review count protecting against a single lucky review', async () => {
+      const rows = [shop('lucky', 5, 1), shop('solid', 4.8, 60), shop('good', 4.4, 200), shop('fine', 4.2, 12)];
+      const names = (await feature(rows)).res.body.data.map((x) => x.name);
+      expect(names[0]).toBe('solid');          // established 4.8 beats a single 5.0
+      expect(names).not.toContain('fine');
+      expect(names).toHaveLength(3);
+    });
+    test('equal score goes to the shop with more reviews; unrated shops come after rated ones and keep rating null', async () => {
+      const twin1 = shop('few', 4.5, 10); const twin2 = shop('many', 4.5, 10);
+      twin2.rating.count = 10; twin1.rating.count = 10; // identical -> stable by id
+      const unrated = shop('new', 0, 0);
+      const out = (await feature([unrated, twin1, twin2])).res.body.data;
+      expect(out.slice(0, 2).map((x) => x.name).sort()).toEqual(['few', 'many']);
+      expect(out[2]).toMatchObject({ name: 'new', rating: null });
+      const moreReviews = (await feature([shop('p', 4.5, 5), shop('q', 4.5, 50)])).res.body.data;
+      expect(moreReviews[0].name).toBe('q');
+    });
+    test('fewer than three eligible shops just returns what exists; none returns an empty list', async () => {
+      expect((await feature([shop('only', 4, 3)])).res.body.data).toHaveLength(1);
+      expect((await feature([])).res.body.data).toEqual([]);
+    });
+    test('the response carries the real rating, a cover and the public video fields only', async () => {
+      const row = (await feature([shop('x', 4.6, 9)])).res.body.data[0];
+      expect(row).toMatchObject({ name: 'x', rating: { avg: 4.6, count: 9 }, coverUrl: expect.stringMatching(/^https:/), video: { url: expect.stringMatching(/^https:/) } });
+      expect(JSON.stringify(row)).not.toContain('publicId');
+    });
   });
 });

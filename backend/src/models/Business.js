@@ -60,6 +60,8 @@ const businessSchema = new mongoose.Schema(
     followerCount: { type: Number, default: 0 },
     isOpen: { type: Boolean, default: true },
     isActive: { type: Boolean, default: true },
+    // Set while an admin has suspended the shop (isActive is false then). byOwner = hidden because the OWNER's account is suspended.
+    suspension: { reason: { type: String, maxlength: 300 }, at: Date, byOwner: Boolean },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true }

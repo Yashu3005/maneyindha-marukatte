@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'l10n/app_strings.dart';
+import 'l10n/locale_provider.dart';
 import 'theme/app_theme.dart';
 import 'routing/app_router.dart';
 
@@ -20,6 +23,20 @@ class MMApp extends ConsumerWidget {
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.light,
       routerConfig: ref.watch(appRouterProvider),
+      locale: ref.watch(localeProvider),
+      supportedLocales: AppStrings.locales,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      locale: ref.watch(localeProvider),
+      supportedLocales: AppStrings.locales,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       debugShowCheckedModeBanner: false,
     );
   }

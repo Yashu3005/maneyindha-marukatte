@@ -28,3 +28,34 @@ test('paid online order and COD order can be confirmed', async () => {
   expect((await (await transitionWith({ method: 'cod', status: 'pending' })).run()).status).toBe('confirmed');
   expect((await (await transitionWith(undefined)).run()).status).toBe('confirmed'); // legacy orders
 });
+
+describe('payment test mode and self-pickup', () => {
+  const saved = { ...process.env };
+  afterEach(() => { process.env = { ...saved }; });
+  test('with Razorpay TEST keys the shop can confirm an unpaid online order; live keys keep the block', async () => {
+    process.env.RAZORPAY_KEY_ID = 'rzp_test_abc';
+    expect((await (await transitionWith({ method: 'razorpay', status: 'pending' })).run()).status).toBe('confirmed');
+    process.env.RAZORPAY_KEY_ID = 'rzp_live_abc';
+    await expect((await transitionWith({ method: 'razorpay', status: 'pending' })).run()).rejects.toMatchObject({ code: 'PAYMENT_PENDING' });
+  });
+  test('ALLOW_CONFIRM_WITHOUT_PAYMENT=true also opens the gate', async () => {
+    delete process.env.RAZORPAY_KEY_ID;
+    process.env.ALLOW_CONFIRM_WITHOUT_PAYMENT = 'true';
+    expect((await (await transitionWith({ method: 'razorpay', status: 'pending' })).run()).status).toBe('confirmed');
+  });
+  const pickup = (isSelfPickup, from, to) => {
+    const user = { id: String(oid()), role: 'entrepreneur' };
+    const order = { _id: oid(), customer: oid(), business: oid(), status: from, items: [], isSelfPickup, payment: undefined };
+    jest.spyOn(Order, 'findById').mockResolvedValue(order);
+    jest.spyOn(Business, 'exists').mockResolvedValue({ _id: order.business });
+    jest.spyOn(Order, 'findOneAndUpdate').mockResolvedValue({ ...order, status: to });
+    return orderService.transition(order._id, to, user);
+  };
+  test('a ready self-pickup order is marked collected directly; a delivery order cannot skip the journey', async () => {
+    expect((await pickup(true, 'ready', 'delivered')).status).toBe('delivered');
+    await expect(pickup(false, 'ready', 'delivered')).rejects.toMatchObject({ statusCode: 422 });
+  });
+  test('a self-pickup order cannot go on a delivery run', async () => {
+    await expect(pickup(true, 'ready', 'picked_up')).rejects.toMatchObject({ statusCode: 422 });
+  });
+});

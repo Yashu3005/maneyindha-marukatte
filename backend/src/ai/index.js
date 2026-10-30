@@ -55,7 +55,7 @@ async function generateProductDescription(input) {
     ...(input.category ? { category: clean(input.category).slice(0, 80) } : {}),
     ...(input.details ? { details: clean(input.details).slice(0, 500) } : {}),
   };
-  const language = ['English', 'Kannada', 'Hindi'].includes(input.language) ? input.language : 'English';
+  const language = ['English', 'Kannada', 'Hindi', 'Tamil', 'Telugu'].includes(input.language) ? input.language : 'English';
   const raw = await provider.completeJson({
     system: SYSTEM,
     prompt: `Write the description in ${language}.\n<product_data>\n${JSON.stringify(data)}\n</product_data>`,
@@ -102,7 +102,7 @@ const assistantOutput = Joi.object({
 const ASSISTANT_SYSTEM = [
   'You are the Maneyindha Marukatte assistant: a friendly helper inside a marketplace of home-made goods made by women entrepreneurs in India.',
   'Help customers find products and shops, and explain how the app works, using ONLY the app facts and catalogue data you are given.',
-  'Rules: reply in the same language the customer writes in (English, Kannada or Hindi), in a warm and brief way (under 120 words), plain text only (no markdown, HTML or emoji lists).',
+  'Rules: reply in the same language the customer writes in (English, Kannada, Hindi, Tamil or Telugu), in a warm and brief way (under 120 words), plain text only (no markdown, HTML or emoji lists).',
   'Never invent products, shops, prices, delivery times, refund or return rules, phone numbers, emails or policies. If the data does not contain the answer, say you are not sure and suggest asking the shop.',
   'You cannot place orders, change orders, take payments or issue refunds: tell the customer where in the app to do it.',
   'To recommend items, put their ids (copied exactly from the data) in productIds / businessIds; recommend only items that are in the data, at most 4 products and 3 shops. Use empty arrays otherwise.',
@@ -137,10 +137,14 @@ async function generateAssistantReply({ message, history = [], guide, catalogue 
     }
   };
   const raw = await completeWithRetry();
-  const { value, error } = assistantOutput.validate(raw, { stripUnknown: false });
+  // Be forgiving about the shape: keep only what we need, drop anything odd, then validate.
+  const ids = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 10) : []);
+  const { value, error } = assistantOutput.validate(
+    { reply: typeof raw?.reply === 'string' ? raw.reply : undefined, productIds: ids(raw?.productIds), businessIds: ids(raw?.businessIds) },
+    { stripUnknown: false });
   if (error) {
     logger.warn(`Assistant answer rejected: ${error.message}`);
-    throw errors.badOutput();
+    throw errors.badOutput('BAD_SHAPE');
   }
   const reply = clean(value.reply).slice(0, MAX_REPLY);
   if (!reply) throw errors.badOutput();

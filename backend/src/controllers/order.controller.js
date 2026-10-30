@@ -7,7 +7,12 @@ exports.create = async (req, res, next) => {
 };
 
 exports.myOrders = async (req, res, next) => {
-  try { ok(res, await orderService.ordersForUser(req.user)); }
+  try { res.set('Cache-Control', 'no-store'); ok(res, await orderService.ordersForUser(req.user)); }
+  catch (e) { next(e); }
+};
+
+exports.received = async (req, res, next) => {
+  try { res.set('Cache-Control', 'no-store'); ok(res, await orderService.receivedOrders(req.user)); }
   catch (e) { next(e); }
 };
 

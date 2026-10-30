@@ -19,7 +19,7 @@ Status codes used: 400 bad input/credentials · 401 not signed in · 403 wrong r
 | Businesses | `GET /businesses` (filters: `category`, `q`, `minRating`, `openNow`, `hasVideo`, `sort=rating|newest|name`), `/businesses/nearby` (`lat`,`lng`,`radiusKm`, same filters), `/businesses/mine`, `/businesses/:id`; `POST /businesses`; `PATCH /businesses/:id/location`; `POST /businesses/:id/documents` (private upload), `GET /businesses/:id/documents`, `DELETE /businesses/:id/documents/:docId`, `POST /businesses/:id/verification-documents` (submit) |
 | Products | `GET /products`, `/products/:id`; `POST /products`; `DELETE /products/:id` |
 | Cart / wishlist / reviews | `/cart`, `/cart/items`, `/cart/coupon`, `/wishlist/*`, `/reviews/*` |
-| Orders | `POST /orders` (`paymentMethod: cod|razorpay`), `GET /orders/mine`, `PATCH /orders/:id/status` |
+| Orders | `POST /orders` (`paymentMethod: cod|razorpay`), `GET /orders/mine` (orders I placed), `GET /orders/received` (shop owners: orders for my shops), `PATCH /orders/:id/status` |
 | Payments | `POST /payments/razorpay/order`, `/payments/razorpay/verify`, `/payments/razorpay/webhook`; `GET /payments/status/:orderId` |
 | AI | `POST /ai/product-description` (entrepreneurs), `POST /ai/assistant` (customer help; real AI only, 503 `AI_NOT_CONFIGURED` if no key) |
 | Rewards | `GET /rewards/me` (badge, progress, reward coupons with status) |
@@ -36,3 +36,5 @@ Global 500 / 15 min / IP. Auth routes 60 / 15 min / IP. `POST /auth/otp/send`: 1
 ## Standards
 - Joi validation on writes (422), ownership checks on entrepreneur writes, server-side pricing
 - Versioning: breaking changes go to `/api/v2`
+
+- Entrepreneur badges: `GET /rewards/seller` (entrepreneur only).

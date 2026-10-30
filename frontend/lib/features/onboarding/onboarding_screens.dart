@@ -1,6 +1,8 @@
 import '../../shared/user_avatar.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../l10n/language_picker.dart';
+import '../../l10n/app_strings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/api_client.dart';
@@ -141,18 +143,19 @@ class LandingScreen extends ConsumerWidget {
         const SizedBox(height: 24),
         const AnimatedBrandLogo(size: 230),
         const SizedBox(height: 12),
-        Text('Made nearby, with love',
+        Text(context.tr('Made nearby, with love'),
             style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
         const SizedBox(height: 48),
         CreamButton(
-            label: 'Get Started',
+            label: context.tr('Get Started'),
             onTap: () => context.push('/onboarding/email')),
         const SizedBox(height: 12),
         TextButton(
           onPressed: () => context.push('/login'),
-          child: Text('Sign in with password',
+          child: Text(context.tr('Sign in with password'),
               style: serif(14, weight: FontWeight.w400, color: MMColors.cream)),
         ),
+        const LanguageButton(onDark: true),
         const _DownloadQr(),
       ]),
     );

@@ -10,7 +10,8 @@
     "lint": "eslint src/",
     "seed": "node scripts/seed.js",
     "admin:hash": "node scripts/hash-admin-password.js",
-    "reset:data": "node scripts/reset-data.js"
+    "reset:data": "node scripts/reset-data.js",
+    "check:shop-photos": "node scripts/check-shop-photos.js"
   },
   "engines": {
     "node": ">=20"

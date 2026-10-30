@@ -140,6 +140,18 @@ final ordersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   return _asList(res.data['data']);
 });
 
+/// Orders received by the shops I own (shop owners only). Kept apart from [ordersProvider], which is what I placed.
+final receivedOrdersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final res = await ApiClient.dio.get('/orders/received');
+  return _asList(res.data['data']);
+});
+
+/// My notifications ({ items, unread }), newest first.
+final notificationsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final res = await ApiClient.dio.get('/notifications');
+  return _asMap(res.data['data']);
+});
+
 final myBusinessesProvider =
     FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final res = await ApiClient.dio.get('/businesses/mine');

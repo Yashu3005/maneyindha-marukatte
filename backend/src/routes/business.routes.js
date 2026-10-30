@@ -68,4 +68,15 @@ router.post('/:id/promo-video', ...ownerOnly,
   businessController.promoAttach);
 router.delete('/:id/promo-video', ...ownerOnly, businessController.promoRemove);
 
+// Shop cover photo (the picture customers see on the home screen, in lists and on the shop page).
+const shopPhotos = require('../services/shopPhoto.service');
+const photoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: shopPhotos.MAX_BYTES, files: 1, fields: 0 } });
+const receivePhoto = (req, res, next) => photoUpload.single('photo')(req, res, (err) => {
+  if (!err) return next();
+  if (err.code === 'LIMIT_FILE_SIZE') return next(new AppError('Image must be 3 MB or smaller', 413));
+  return next(new AppError('Invalid upload', 400));
+});
+router.post('/:id/photo', ...ownerOnly, rateLimit({ windowMs: 60 * 60 * 1000, max: 30, standardHeaders: true }), receivePhoto, businessController.photoSet);
+router.delete('/:id/photo', ...ownerOnly, businessController.photoRemove);
+
 module.exports = router;

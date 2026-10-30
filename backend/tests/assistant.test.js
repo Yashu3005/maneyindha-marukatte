@@ -133,7 +133,7 @@ test('with no AI provider configured it says so (503) — it never fabricates an
 });
 
 test('unusable model output is a 502, not a made-up reply', async () => {
-  for (const out of [{ reply: '' }, { reply: 42 }, { answer: 'hi' }, { reply: 'ok', productIds: 'x' }]) {
+  for (const out of [{ reply: '' }, { reply: 42 }, { answer: 'hi' }]) {
     fetchMock.mockImplementationOnce(async () => resp(200, geminiOk(out)));
     const res = await ask();
     expect(res.status).toBe(502);
@@ -156,4 +156,23 @@ test('rate limited per signed-in user', async () => {
   expect(codes.filter((c) => c === 200)).toHaveLength(30);
   expect(codes.slice(30)).toEqual([429, 429]);
   expect((await request(app).post(url).set(bearer('customer', String(oid()))).send({ message: 'hello' })).status).toBe(200); // another user is unaffected
+});
+
+test('a ```json fenced or wrapped answer is still accepted', async () => {
+  const body = JSON.stringify({ reply: 'Open Orders to track it.', productIds: null, businessIds: [] });
+  fetchMock.mockImplementationOnce(async () => resp(200, { candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '```json\n' + body + '\n```' }] } }] }));
+  const res = await ask();
+  expect(res.status).toBe(200);
+  expect(res.body.data.reply).toBe('Open Orders to track it.');
+});
+
+test('a cut-off answer reports a short reason code (and is retried once first)', async () => {
+  const cut = { candidates: [{ finishReason: 'MAX_TOKENS', content: { parts: [{ text: '{"reply":"Open Or' }] } }] };
+  fetchMock.mockImplementation(async () => resp(200, cut));
+  const res = await ask();
+  expect(res.status).toBe(502);
+  expect(res.body.error.code).toBe('AI_BAD_OUTPUT');
+  expect(res.body.error.message).toContain('(MAX_TOKENS)');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  fetchMock.mockReset();
 });

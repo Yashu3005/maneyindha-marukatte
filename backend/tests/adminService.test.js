@@ -162,10 +162,13 @@ describe('members', () => {
     expect(filter.$or[0].name.test('a.*(b')).toBe(true);
   });
   test('suspending signs the member out everywhere; restoring does not', async () => {
-    const u = { _id: oid(), role: 'customer', isActive: true, save: jest.fn() };
+    const u = { _id: oid(), role: 'customer', email: 'a@b.c', isActive: true, save: jest.fn() };
     jest.spyOn(User, 'findById').mockResolvedValue(u);
+    jest.spyOn(Business, 'updateMany').mockResolvedValue({});
+    jest.spyOn(Notification, 'create').mockResolvedValue({});
+    jest.spyOn(require('../src/services/email.service'), 'sendNoticeEmail').mockResolvedValue({ sent: true });
     const del = jest.spyOn(RefreshSession, 'deleteMany').mockResolvedValue({});
-    expect(await admin.setUserActive(u._id, false)).toEqual({ id: u._id, isActive: false });
+    expect(await admin.setUserActive(u._id, false, { reason: 'Account misuse' })).toMatchObject({ id: u._id, isActive: false });
     expect(del).toHaveBeenCalledWith({ user: u._id });
     del.mockClear();
     await admin.setUserActive(u._id, true);

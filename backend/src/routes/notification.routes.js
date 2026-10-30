@@ -1,24 +1,18 @@
 const router = require('express').Router();
+const Joi = require('joi');
 const { requireAuth } = require('../middleware/auth');
-const Notification = require('../models/Notification');
+const validate = require('../middleware/validate');
 const { ok } = require('../utils/apiResponse');
+const notifications = require('../services/notification.service');
 
-router.use(requireAuth);
-
-router.get('/', async (req, res, next) => {
-  try {
-    const items = await Notification.find({ user: req.user.id })
-      .sort('-createdAt').limit(50);
-    const unread = await Notification.countDocuments({ user: req.user.id, isRead: false });
-    ok(res, items, { unread });
-  } catch (e) { next(e); }
+router.get('/', requireAuth, async (req, res, next) => {
+  try { res.set('Cache-Control', 'no-store'); ok(res, await notifications.listFor(req.user.id)); } catch (e) { next(e); }
 });
-
-router.patch('/read-all', async (req, res, next) => {
-  try {
-    await Notification.updateMany({ user: req.user.id, isRead: false }, { isRead: true });
-    ok(res, { done: true });
-  } catch (e) { next(e); }
-});
+// Body { ids?: [...] }; no ids = mark everything read.
+router.post('/read', requireAuth,
+  validate(Joi.object({ ids: Joi.array().items(Joi.string().hex().length(24)).max(100) })),
+  async (req, res, next) => {
+    try { ok(res, await notifications.markRead(req.user.id, req.body.ids)); } catch (e) { next(e); }
+  });
 
 module.exports = router;

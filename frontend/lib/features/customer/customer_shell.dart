@@ -1,11 +1,14 @@
 import '../../shared/user_avatar.dart';
 import '../../services/device_location.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/language_picker.dart';
+import '../../l10n/app_strings.dart';
 import '../businesses/promo_ads_carousel.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../services/auth_state.dart';
 import '../../services/repositories.dart';
+import '../notifications/notifications_screen.dart';
 import '../../shared/ui.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
@@ -40,10 +43,13 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
       ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          setState(() => _index = i);
+          ref.read(homeActiveProvider.notifier).state = i == 0; // the home video pauses on other tabs
+        },
         destinations: [
-          const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          const NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
+          NavigationDestination(icon: const Icon(Icons.home_outlined), selectedIcon: const Icon(Icons.home), label: context.tr('Home')),
+          NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), selectedIcon: const Icon(Icons.receipt_long), label: context.tr('Orders')),
           NavigationDestination(
             icon: Badge(
               isLabelVisible: cartCount > 0,
@@ -57,9 +63,9 @@ class _CustomerShellState extends ConsumerState<CustomerShell> {
               backgroundColor: MMColors.clay,
               child: const Icon(Icons.shopping_bag),
             ),
-            label: 'Cart',
+            label: context.tr('Cart'),
           ),
-          const NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
+          NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: context.tr('Profile')),
         ],
       ),
     );
@@ -123,7 +129,6 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
     final businesses = ref.watch(shopsProvider(_filters));
     // Category circles always come from the unfiltered list so they don't vanish once one is chosen.
     final allShops = ref.watch(shopsProvider(const ShopFilters()));
-    final Map? badge = auth.isLoggedIn ? (ref.watch(rewardsProvider).valueOrNull?['badge'] as Map?) : null;
     final products = ref.watch(productsProvider(null));
 
     return SafeArea(
@@ -146,20 +151,14 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
               child: Row(children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Namaste, ${auth.name.split(' ').first} 🌸',
+                    Text('${context.tr('Namaste')}, ${auth.name.split(' ').first} 🌸',
                         style: serif(24, color: MMColors.cream)),
                     const SizedBox(height: 4),
-                    Text('Discover home-made treasures near you',
+                    Text(context.tr('Discover home-made treasures near you'),
                         style: TextStyle(color: MMColors.cream.withOpacity(0.85))),
-                    if (badge != null) ...[
-                      const SizedBox(height: 10),
-                      InkWell(
-                        onTap: () => context.push('/rewards'),
-                        child: BadgeChip(badge: badge, onDark: true),
-                      ),
-                    ],
                   ]),
                 ),
+                if (auth.isLoggedIn) const NotificationBell(color: MMColors.cream),
                 const SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.all(3),
@@ -174,14 +173,14 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
             Row(children: [
               Expanded(
                 child: _QuickAction(
-                  icon: Icons.card_giftcard, label: 'Rewards & coupons',
+                  icon: Icons.card_giftcard, label: context.tr('Rewards & coupons'),
                   onTap: () => auth.isLoggedIn ? context.push('/rewards') : context.push('/login'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _QuickAction(
-                  icon: Icons.support_agent, label: 'Ask the assistant',
+                  icon: Icons.support_agent, label: context.tr('Ask the assistant'),
                   onTap: () => context.push('/assistant'),
                 ),
               ),
@@ -210,7 +209,7 @@ class _CustomerHomeState extends ConsumerState<_CustomerHome> {
                     final c = b['category'];
                     if (c is Map && c['name'] != null) {
                       catImages.putIfAbsent(
-                          c['name'].toString(), () => b['bannerUrl']?.toString());
+                          c['name'].toString(), () => shopCover(b));
                     }
                   }
                   final list = catImages.keys.toList();
@@ -403,7 +402,7 @@ class _ShopCard extends StatelessWidget {
             SizedBox(
               height: 90, width: double.infinity,
               child: Stack(fit: StackFit.expand, children: [
-                NetImage(business['bannerUrl']?.toString()),
+                NetImage(shopCover(business)),
                 if (business['promoVideo'] is Map && (business['promoVideo'] as Map)['url'] != null)
                   const Positioned(
                     right: 8, top: 8,
@@ -454,7 +453,7 @@ class _CustomerProfile extends ConsumerWidget {
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Personal details'),
+        title: Text(context.tr('Personal details')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
           const SizedBox(height: 10),
@@ -482,7 +481,7 @@ class _CustomerProfile extends ConsumerWidget {
     final saved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Address book'),
+        title: Text(context.tr('Address book')),
         content: TextField(
             controller: line,
             decoration: const InputDecoration(labelText: 'Home address')),
@@ -529,19 +528,19 @@ class _CustomerProfile extends ConsumerWidget {
         Card(child: Column(children: [
           ListTile(
             leading: const Icon(Icons.badge_outlined),
-            title: const Text('Personal details'),
+            title: Text(context.tr('Personal details')),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _editPersonal(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.location_on_outlined),
-            title: const Text('Address book'),
+            title: Text(context.tr('Address book')),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _editAddress(context, ref),
           ),
           ListTile(
             leading: const Icon(Icons.storefront_outlined),
-            title: const Text('Become an Entrepreneur'),
+            title: Text(context.tr('Become an Entrepreneur')),
             trailing: const Icon(Icons.chevron_right),
             onTap: () async {
               final hasBusiness = await ref
@@ -556,19 +555,20 @@ class _CustomerProfile extends ConsumerWidget {
           ),
           ListTile(
             leading: const Icon(Icons.card_giftcard_outlined),
-            title: const Text('Rewards & badges'),
+            title: const Text('Rewards & coupons'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/rewards'),
           ),
           ListTile(
             leading: const Icon(Icons.support_agent_outlined),
-            title: const Text('Help assistant'),
+            title: Text(context.tr('Help assistant')),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/assistant'),
           ),
+          const LanguageTile(),
           ListTile(
             leading: const Icon(Icons.logout),
-            title: const Text('Logout'),
+            title: Text(context.tr('Logout')),
             trailing: const Icon(Icons.chevron_right),
             onTap: () {
               ref.read(authProvider.notifier).logout();

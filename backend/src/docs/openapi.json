@@ -758,12 +758,30 @@
         }
       }
     },
+    "/orders/received": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "Orders received by the shops I own (entrepreneur only; customer name and phone included)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Orders"
+          }
+        }
+      }
+    },
     "/orders/mine": {
       "get": {
         "tags": [
           "Orders"
         ],
-        "summary": "My orders (role-scoped)",
+        "summary": "Orders I placed (as a customer)",
         "security": [
           {
             "bearerAuth": []
@@ -1052,7 +1070,7 @@
         "tags": [
           "Businesses"
         ],
-        "summary": "Submit the application for review (status \u2192 in_review)",
+        "summary": "Submit the application for review (status \u2192 in_review) (needs ID proof, business proof and a business profile photo; PHOTO_MISSING otherwise)",
         "security": [
           {
             "bearerAuth": []
@@ -2587,7 +2605,7 @@
             }
           }
         ],
-        "description": "The server asks Cloudinary about the upload and accepts only MP4/MOV/WebM, \u2264 40 MB, \u2264 60 s, under this shop's own folder. Replaces and deletes the previous video.",
+        "description": "The server asks Cloudinary about the upload and accepts only MP4/MOV/WebM, \u2264 100 MB, \u2264 60 s, under this shop's own folder. Replaces and deletes the previous video.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2619,7 +2637,7 @@
             "description": "{ url, posterUrl, duration, title, caption }"
           },
           "422": {
-            "description": "VIDEO_INVALID (format, > 40 MB or > 60 s \u2014 the upload is deleted) or foreign publicId"
+            "description": "VIDEO_INVALID (format, > 100 MB or > 60 s \u2014 the upload is deleted) or foreign publicId"
           },
           "403": {
             "description": "Shop not approved yet"
@@ -2766,12 +2784,218 @@
         }
       }
     },
+    "/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "My notifications (latest 50) and the unread count",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ items, unread }"
+          }
+        }
+      }
+    },
+    "/notifications/read": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mark my notifications read (body ids optional; none = all)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ updated }"
+          }
+        }
+      }
+    },
+    "/admin/businesses/{businessId}/status": {
+      "patch": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Suspend (reason required) or restore one shop; the owner is notified in the app and by email",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "businessId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "isActive"
+                ],
+                "properties": {
+                  "isActive": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ id, isActive, changed, notified }"
+          },
+          "409": {
+            "description": "The owner account is suspended"
+          }
+        }
+      }
+    },
+    "/admin/owners": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Shop owners with shops, delivered orders, revenue, rating and badge (read-only)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/owners/{id}": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "One owner: details, badges, shops and six months of growth",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/shops": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "All shops with owner, status, suspension, products, orders and revenue (?status=approved|in_review|pending|rejected|suspended)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/products": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "All products with shop, price and stock",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/badges": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Entrepreneur badge distribution, achievements and leaderboard",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/growth": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Monthly growth of members, shops and orders, with month-on-month change (?months=3..12)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/admin/users/{id}/status": {
       "patch": {
         "tags": [
           "Admin"
         ],
-        "summary": "Suspend or restore a member (signs them out when suspended)",
+        "summary": "Suspend (reason required) or restore a member; signs them out and hides their shops when suspended; they are notified in the app and by email",
         "security": [
           {
             "bearerAuth": []
@@ -2965,8 +3189,8 @@
         "tags": [
           "Businesses"
         ],
-        "summary": "A few random approved shop videos for the home screen",
-        "description": "Public. `limit` 1-8 (default 4). Only videos the admin approved, from approved shops; a different random set on every call (never cached).",
+        "summary": "Featured shop videos for the home banner (best-rated first, at most 3)",
+        "description": "Public. Shops with an approved, playable video, ranked by a review-count-weighted rating (so one lucky 5-star review does not beat an established shop); ties go to more reviews; unrated shops come last and have rating null. `limit` 1-3 (default 3). Cached for 60 seconds.",
         "parameters": [
           {
             "name": "limit",
@@ -2978,7 +3202,7 @@
         ],
         "responses": {
           "200": {
-            "description": "List of {businessId, name, logoUrl, rating, video{url,posterUrl,title,caption,duration}}"
+            "description": "List of {businessId, name, coverUrl, rating{avg,count}|null, video{url,posterUrl,title,caption,duration}}"
           }
         }
       }
@@ -3066,6 +3290,109 @@
         "responses": {
           "200": {
             "description": "Decision saved"
+          }
+        }
+      }
+    },
+    "/rewards/seller": {
+      "get": {
+        "tags": [
+          "Rewards"
+        ],
+        "summary": "The entrepreneur's badge, progress and achievements",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Entrepreneurs only. Badge tiers come from orders their shops have delivered; achievements: Highly Rated (4.5 stars or more from 5+ reviews) and On Camera (an approved shop video). Customers do not get badges; they get coupons from /rewards/me.",
+        "responses": {
+          "200": {
+            "description": "badge, badges, next, achievements, stats"
+          }
+        }
+      }
+    },
+    "/businesses/{id}/photo": {
+      "post": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Upload the shop's cover photo",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Owner only. multipart/form-data with one `photo` file (JPEG, PNG or WebP, max 3 MB, type checked from the bytes). Stored as the shop cover (`bannerUrl`); a new upload replaces the old one. 30 requests/hour.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "photo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "photo"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ bannerUrl }"
+          },
+          "413": {
+            "description": "Too large"
+          },
+          "415": {
+            "description": "Not an accepted image"
+          },
+          "503": {
+            "description": "Uploads not configured"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Businesses"
+        ],
+        "summary": "Remove the shop's cover photo",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "Owner only.",
+        "responses": {
+          "200": {
+            "description": "{ removed }"
           }
         }
       }

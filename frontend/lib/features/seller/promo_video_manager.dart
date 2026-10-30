@@ -66,7 +66,7 @@ class _PromoVideoSheetState extends ConsumerState<_PromoVideoSheet> {
       // 1. Server signs a one-off upload for this shop (the Cloudinary secret never reaches the browser).
       final sig = (await ApiClient.dio.post('/businesses/$_shopId/promo-video/signature')).data['data'] as Map;
       final limits = (sig['limits'] as Map?) ?? const {};
-      final maxBytes = (limits['maxBytes'] as num?)?.toInt() ?? 40 * 1024 * 1024;
+      final maxBytes = (limits['maxBytes'] as num?)?.toInt() ?? 100 * 1024 * 1024;
       final maxSeconds = (limits['maxSeconds'] as num?)?.toInt() ?? 60;
 
       final picked = await FilePicker.platform.pickFiles(type: FileType.video, withData: true);
@@ -113,8 +113,11 @@ class _PromoVideoSheetState extends ConsumerState<_PromoVideoSheet> {
     } on DioException catch (e) {
       if (!mounted) return;
       setState(() { _busy = false; _progress = null; });
+      String? hostReason;
+      final data = e.response?.data;
+      if (data is Map && data['error'] is Map) hostReason = (data['error'] as Map)['message']?.toString();
       _say(e.requestOptions.uri.host.contains('cloudinary')
-          ? 'The upload to the video host failed. Please check your connection and try again.'
+          ? 'The video host refused the upload${hostReason != null ? ': $hostReason' : '. Please check your connection and try again.'}'
           : apiError(e), error: true);
     } catch (e) {
       if (!mounted) return;
@@ -148,7 +151,7 @@ class _PromoVideoSheetState extends ConsumerState<_PromoVideoSheet> {
         const SizedBox(height: 6),
         Text(
           'Show how you make your products. The admin checks every video first; once approved it plays on your shop page and can appear as an ad on the home screen. '
-          'MP4, MOV or WebM · up to 60 seconds · up to 40 MB.',
+          'MP4, MOV or WebM · up to 60 seconds · up to 100 MB.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 14),

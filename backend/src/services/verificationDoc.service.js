@@ -107,7 +107,7 @@ async function addDocument(ownerId, businessId, file, { type, identityType } = {
 
 async function listDocuments(ownerId, businessId) {
   const business = await ownBusiness(ownerId, businessId);
-  return { status: business.verification.status, documents: business.verification.documents.map(describe) };
+  return { status: business.verification.status, photoUrl: business.bannerUrl || null, documents: business.verification.documents.map(describe) };
 }
 
 async function removeDocument(ownerId, businessId, docId) {
@@ -134,6 +134,9 @@ async function submitForReview(ownerId, businessId) {
   const missing = REQUIRED_TYPES.filter((t) => !have.has(t));
   if (missing.length) {
     throw new AppError(`Upload your ${missing.map((t) => (t === 'id_proof' ? 'ID proof' : 'business proof')).join(' and ')} first`, 422, 'DOCUMENTS_MISSING');
+  }
+  if (!/^https:\/\//.test(business.bannerUrl || '')) {
+    throw new AppError('Add a profile photo of your business first', 422, 'PHOTO_MISSING');
   }
   business.verification.status = 'in_review';
   business.verification.rejectionReason = undefined;

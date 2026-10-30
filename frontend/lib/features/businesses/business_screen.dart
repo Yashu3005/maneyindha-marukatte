@@ -39,7 +39,7 @@ class BusinessScreen extends ConsumerWidget {
                 child: SizedBox(
                   height: 190, width: double.infinity,
                   child: Stack(fit: StackFit.expand, children: [
-                    NetImage(b['bannerUrl']?.toString()),
+                    NetImage(shopCover(b)),
                     // darkens the bottom so the shop name stays readable on any photo
                     const DecoratedBox(
                       decoration: BoxDecoration(

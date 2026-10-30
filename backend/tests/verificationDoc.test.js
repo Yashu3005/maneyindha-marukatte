@@ -16,6 +16,7 @@ const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]);
 const PDF = Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(64, 2)]);
 
+const PHOTO = 'https://res.cloudinary.com/demo/image/upload/shops/shop_1.jpg';
 let ownerId; let bizId; let biz; let uploads; let destroyed;
 const mk = (status = 'pending') => new Business({ owner: ownerId, name: 'Asha Bakes', verification: { status } });
 
@@ -148,6 +149,12 @@ describe('upload', () => {
 });
 
 describe('list and remove', () => {
+  test('the document list also reports the shop photo (null until one is uploaded)', async () => {
+    const get = () => request(app).get(`${api}/businesses/${bizId}/documents`).set(bearer('entrepreneur', ownerId));
+    expect((await get()).body.data.photoUrl).toBeNull();
+    biz.bannerUrl = PHOTO;
+    expect((await get()).body.data.photoUrl).toBe(PHOTO);
+  });
   test('owner sees metadata only; can remove a document while editable', async () => {
     await up(PDF, { type: 'business_proof' });
     const list = await request(app).get(`${api}/businesses/${bizId}/documents`).set(bearer('entrepreneur', ownerId));
@@ -176,6 +183,12 @@ describe('submit', () => {
     const one = await submit(); expect(one.status).toBe(422); expect(one.body.error.code).toBe('DOCUMENTS_MISSING');
     expect(biz.verification.status).toBe('pending');
     await up(JPEG, ID);
+    const noPhoto = await submit();
+    expect(noPhoto.status).toBe(422); expect(noPhoto.body.error.code).toBe('PHOTO_MISSING');
+    expect(biz.verification.status).toBe('pending');
+    biz.bannerUrl = 'http://not-https.example/shop.jpg'; // only a real https photo counts
+    expect((await submit()).body.error.code).toBe('PHOTO_MISSING');
+    biz.bannerUrl = PHOTO;
     const ok = await submit();
     expect(ok.status).toBe(200);
     expect(ok.body.data.status).toBe('in_review');
@@ -188,7 +201,7 @@ describe('submit', () => {
     expect(biz.verification.status).toBe('pending');
   });
   test('cannot be submitted twice or after approval; customers cannot submit', async () => {
-    await up(PDF, { type: 'business_proof' }); await up(JPEG, ID);
+    await up(PDF, { type: 'business_proof' }); await up(JPEG, ID); biz.bannerUrl = PHOTO;
     expect((await submit()).status).toBe(200);
     expect((await submit()).status).toBe(422);
     expect((await submit('customer')).status).toBe(403);

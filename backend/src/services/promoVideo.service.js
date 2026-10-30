@@ -2,12 +2,13 @@ const crypto = require('crypto');
 const { v2: cloudinary } = require('cloudinary');
 const Business = require('../models/Business');
 const AppError = require('../utils/AppError');
+const { coverOf } = require('../utils/shopPhoto');
 const logger = require('../utils/logger');
 
 // Promo ("story") videos. Videos are too large for a serverless request body, so the browser uploads them
 // straight to Cloudinary using a short-lived signature from us. The server then CHECKS what was uploaded
 // (size, length, format, and that it sits under this shop's own folder) before it is ever shown to customers.
-const MAX_BYTES = 40 * 1024 * 1024;
+const MAX_BYTES = 100 * 1024 * 1024; // Cloudinary's free plan accepts videos up to 100 MB
 const MAX_SECONDS = 60;
 const FORMATS = ['mp4', 'mov', 'webm'];
 
@@ -35,7 +36,7 @@ const provider = {
     config();
     return {
       url: cloudinary.url(publicId, { resource_type: 'video', secure: true, format: 'mp4',
-        transformation: [{ width: 720, crop: 'limit', quality: 'auto' }] }),
+        transformation: [{ width: 720, crop: 'limit', quality: 'auto', end_offset: MAX_SECONDS }] }), // playback is capped at the limit
       posterUrl: cloudinary.url(publicId, { resource_type: 'video', secure: true, format: 'jpg',
         transformation: [{ width: 720, crop: 'limit', start_offset: '0' }] }),
     };
@@ -93,14 +94,23 @@ async function attachVideo(ownerId, businessId, { publicId, title, caption }) {
     throw new AppError(message, 422, 'VIDEO_INVALID');
   };
   if (!info || !FORMATS.includes(String(info.format || '').toLowerCase())) return reject('Please upload an MP4, MOV or WebM video');
-  if (!(info.bytes > 0) || info.bytes > MAX_BYTES) return reject('The video must be 40 MB or smaller');
-  if (!(info.duration > 0) || info.duration > MAX_SECONDS + 0.5) return reject(`The video must be ${MAX_SECONDS} seconds or shorter`);
+  if (!(info.bytes > 0) || info.bytes > MAX_BYTES) return reject('The video must be 100 MB or smaller');
+  // Cloudinary does not always report the length straight after an upload. When it does not, the video is
+  // accepted (size is still checked) and playback is cut at the limit by the delivery URL.
+  const reported = [info.duration, info.video?.duration, info.video_metadata?.duration].find((v) => v !== undefined && v !== null);
+  let duration;
+  if (reported === undefined) {
+    logger.warn(`Promo video length not reported by Cloudinary (fields: ${Object.keys(info).slice(0, 30).join(',')})`);
+  } else {
+    duration = Number(reported);
+    if (!(duration > 0) || duration > MAX_SECONDS + 0.5) return reject(`The video must be ${MAX_SECONDS} seconds or shorter`);
+  }
 
   const previous = business.promoVideo?.publicId;
   const urls = provider.urls(publicId);
   business.promoVideo = {
     publicId, url: urls.url, posterUrl: urls.posterUrl,
-    duration: Math.round(info.duration * 10) / 10, bytes: info.bytes, format: String(info.format).toLowerCase(),
+    duration: duration === undefined ? undefined : Math.round(duration * 10) / 10, bytes: info.bytes, format: String(info.format).toLowerCase(),
     title: String(title || '').trim().slice(0, 80) || undefined,
     caption: String(caption || '').trim().slice(0, 240) || undefined,
     uploadedAt: new Date(),
@@ -171,22 +181,39 @@ async function reviewVideo(businessId, action, reason) {
   return { businessId: business._id, status: business.promoVideo.review.status };
 }
 
-/** A few random approved videos from open, approved shops, for the home screen. */
-async function randomApprovedAds(limit = 4) {
-  const rows = await Business.aggregate([
-    { $match: { isActive: true, 'verification.status': 'approved', 'promoVideo.review.status': 'approved', 'promoVideo.url': { $exists: true } } },
-    { $sample: { size: limit } },
-    { $project: { name: 1, logoUrl: 1, 'rating.avg': 1, 'rating.count': 1,
-      'promoVideo.url': 1, 'promoVideo.posterUrl': 1, 'promoVideo.title': 1, 'promoVideo.caption': 1, 'promoVideo.duration': 1 } },
-  ]);
-  return rows.map((b) => ({
-    businessId: b._id, name: b.name, logoUrl: b.logoUrl, rating: b.rating,
+/**
+ * The featured videos for the home banner: the best-rated shops (at most `limit`, never more than 3) that have an
+ * approved, playable video. Deterministic, from real ratings only.
+ *  - A shop's score is a weighted average (Bayesian): ratings pull towards the average of all rated shops until a shop
+ *    has about PRIOR_VOTES reviews, so one 5-star review does not beat an established 4.8.
+ *  - Ties go to the shop with more reviews, then the older shop (stable order).
+ *  - Shops with no ratings come after every rated shop; no rating is ever invented.
+ */
+const PRIOR_VOTES = 5;
+async function featuredVideos(limit = 3) {
+  const n = Math.min(Math.max(parseInt(limit, 10) || 3, 1), 3);
+  const shops = await Business.find({
+    isActive: true, deletedAt: null, 'verification.status': 'approved',
+    'promoVideo.review.status': 'approved', 'promoVideo.url': { $regex: '^https://' },
+  }).select('name logoUrl bannerUrl gallery rating promoVideo').limit(200).lean();
+
+  const rated = shops.filter((b) => (b.rating?.count || 0) > 0);
+  const mean = rated.length ? rated.reduce((t, b) => t + b.rating.avg, 0) / rated.length : 0;
+  const scoreOf = (b) => (b.rating.count / (b.rating.count + PRIOR_VOTES)) * b.rating.avg
+    + (PRIOR_VOTES / (b.rating.count + PRIOR_VOTES)) * mean;
+  const byId = (x, y) => String(x._id).localeCompare(String(y._id));
+  rated.sort((x, y) => (scoreOf(y) - scoreOf(x)) || (y.rating.count - x.rating.count) || byId(x, y));
+  const unrated = shops.filter((b) => !((b.rating?.count || 0) > 0)).sort(byId);
+
+  return [...rated, ...unrated].slice(0, n).map((b) => ({
+    businessId: b._id, name: b.name, coverUrl: coverOf(b),
+    rating: (b.rating?.count || 0) > 0 ? { avg: b.rating.avg, count: b.rating.count } : null,
     video: publicShape(b.promoVideo),
   }));
 }
 
 module.exports = {
   createUploadSignature, attachVideo, removeVideo, adminRemoveVideo, publicShape,
-  listForReview, reviewVideo, randomApprovedAds,
+  listForReview, reviewVideo, featuredVideos,
   MAX_BYTES, MAX_SECONDS, FORMATS, _provider: provider,
 };

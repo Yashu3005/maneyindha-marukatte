@@ -131,6 +131,53 @@ exports.sendOtpEmail = async (args) => {
   return { id: data.id };
 };
 
+// A short notice (for example "your account was suspended"). Best effort: the action it reports has already
+// happened, so a delivery problem is logged and reported as { sent: false }, never thrown.
+const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function noticeHtml({ heading, message }) {
+  const logo = logoUrl();
+  const header = logo
+    ? `<tr><td align="center" style="padding-bottom:6px"><img src="${logo}" width="96" height="96" alt="Maneyindha Marukatte" style="display:block;border:0;width:96px;height:96px"></td></tr>`
+    : '';
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#f4f1ea;font-family:Arial,Helvetica,sans-serif;color:#2f3a1f">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f1ea;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border-radius:16px;padding:28px">
+${header}<tr><td align="center" style="font-size:20px;font-weight:bold;color:#4a5a2a;padding-bottom:12px">${escHtml(heading)}</td></tr>
+<tr><td style="font-size:16px;line-height:1.5;padding-bottom:12px">${escHtml(message).replace(/\n/g, '<br>')}</td></tr>
+<tr><td style="font-size:13px;line-height:1.5;color:#777">Maneyindha Marukatte</td></tr>
+</table></td></tr></table></body></html>`;
+}
+exports._noticeHtml = noticeHtml;
+
+exports.sendNoticeEmail = async ({ to, subject, heading, message }) => {
+  if (!to) return { sent: false };
+  const html = noticeHtml({ heading, message });
+  const text = `${heading}\n\n${message}\n\nManeyindha Marukatte`;
+  try {
+    if (provider() === 'brevo') {
+      const apiKey = process.env.BREVO_API_KEY;
+      const sender = parseFrom(process.env.BREVO_FROM_EMAIL);
+      if (!apiKey || !sender) return { sent: false };
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': apiKey, accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({ sender, to: [{ email: to }], subject, htmlContent: html, textContent: text }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) { logger.warn(`Notice email rejected by Brevo: HTTP ${res.status}`); return { sent: false }; }
+      return { sent: true };
+    }
+    if (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) return { sent: false };
+    const { data, error } = (await getClient().emails.send({ from: process.env.RESEND_FROM_EMAIL, to: [to], subject, html, text })) || {};
+    if (error || !data?.id) { logger.warn(`Notice email rejected by Resend: ${error?.name || 'unknown'}`); return { sent: false }; }
+    return { sent: true };
+  } catch (e) {
+    logger.warn(`Notice email failed: ${e?.name || 'Error'}`);
+    return { sent: false };
+  }
+};
+
 /** Looks up what Resend recorded for a message (delivered / bounced / …). */
 exports.getDeliveryStatus = async (id) => {
   if (provider() === 'brevo') throw new AppError('Delivery lookup is only available with Resend; check the Brevo dashboard (Transactional → Logs)', 400, 'EMAIL_STATUS_UNSUPPORTED');

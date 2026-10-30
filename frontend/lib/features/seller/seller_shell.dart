@@ -1,5 +1,7 @@
 import '../../shared/user_avatar.dart';
 import 'package:flutter/material.dart';
+import '../../l10n/language_picker.dart';
+import '../../l10n/app_strings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:dio/dio.dart' show FormData, MultipartFile;
@@ -10,6 +12,11 @@ import '../../services/repositories.dart';
 import '../../shared/widgets.dart';
 import '../../theme/app_theme.dart';
 import 'promo_video_manager.dart';
+import 'shop_photo_manager.dart';
+import 'suspension_banner.dart';
+import '../notifications/notifications_screen.dart';
+import 'seller_order_card.dart';
+import 'seller_badges.dart';
 
 /// Entrepreneur app: Dashboard · Products · Orders · Earnings · Profile.
 class SellerShell extends ConsumerStatefulWidget {
@@ -48,12 +55,12 @@ class _SellerShellState extends ConsumerState<SellerShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-          NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Products'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: 'Orders'),
-          NavigationDestination(icon: Icon(Icons.show_chart), label: 'Earnings'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
+        destinations: [
+          NavigationDestination(icon: const Icon(Icons.dashboard_outlined), selectedIcon: const Icon(Icons.dashboard), label: context.tr('Dashboard')),
+          NavigationDestination(icon: const Icon(Icons.inventory_2_outlined), selectedIcon: const Icon(Icons.inventory_2), label: context.tr('Products')),
+          NavigationDestination(icon: const Icon(Icons.receipt_long_outlined), selectedIcon: const Icon(Icons.receipt_long), label: context.tr('Orders')),
+          NavigationDestination(icon: const Icon(Icons.show_chart), label: context.tr('Earnings')),
+          NavigationDestination(icon: const Icon(Icons.person_outline), selectedIcon: const Icon(Icons.person), label: context.tr('Profile')),
         ],
       ),
     );
@@ -134,6 +141,7 @@ class _ApprovalGate extends ConsumerWidget {
                   onPressed: () async {
                     await ref.read(authProvider.notifier).switchRole('customer');
                     ref.invalidate(ordersProvider);
+                    ref.invalidate(receivedOrdersProvider);
                     ref.invalidate(cartProvider);
                     if (context.mounted) context.go('/app');
                   },
@@ -191,7 +199,7 @@ class _DashboardTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     final shops = ref.watch(myBusinessesProvider);
-    final orders = ref.watch(ordersProvider);
+    final orders = ref.watch(receivedOrdersProvider);
 
     return Container(
       color: MMColors.olive,
@@ -206,12 +214,16 @@ class _DashboardTab extends ConsumerWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text('Welcome,\n${auth.name}',
+              child: Text('${context.tr('Welcome')},\n${auth.name}',
                   style: serif(20, color: MMColors.cream)),
             ),
-            const Icon(Icons.notifications_none, color: MMColors.cream),
+            const NotificationBell(color: MMColors.cream),
           ]),
           const SizedBox(height: 20),
+          const SellerBadgesCard(),
+          const OrdersAutoRefresh(),
+          const SuspensionBanner(),
+          const ShopPhotoNudge(),
           shops.when(
             loading: () => const LoadingView(),
             error: (e, _) => ErrorView(message: apiError(e)),
@@ -223,9 +235,7 @@ class _DashboardTab extends ConsumerWidget {
                   ? const AsyncValue.data(<Map<String, dynamic>>[])
                   : ref.watch(productsProvider(_shopId(myShops)));
               final orderList = orders.asData?.value ?? [];
-              final received = orderList
-                  .where((o) => (o['business'] as Map?)?['_id'] != null || true)
-                  .toList();
+              final received = orderList;
               return GridView.count(
                 crossAxisCount: 2,
                 shrinkWrap: true,
@@ -234,18 +244,18 @@ class _DashboardTab extends ConsumerWidget {
                 crossAxisSpacing: 12,
                 childAspectRatio: 1.7,
                 children: [
-                  _StatCard(label: 'Total Orders', value: '${received.length}'),
-                  _StatCard(label: 'Total Earnings', value: rupees(_earnings(received))),
-                  _StatCard(label: 'Total Products',
+                  _StatCard(label: context.tr('Total Orders'), value: '${received.length}'),
+                  _StatCard(label: context.tr('Total Earnings'), value: rupees(_earnings(received))),
+                  _StatCard(label: context.tr('Total Products'),
                       value: '${products.asData?.value.length ?? 0}'),
-                  _StatCard(label: 'Average Rating',
+                  _StatCard(label: context.tr('Average Rating'),
                       value: (rating['count'] ?? 0) == 0 ? 'New' : '${rating['avg']} ★'),
                 ],
               );
             },
           ),
           const SizedBox(height: 20),
-          Text('Recent Orders', style: serif(18, color: MMColors.cream)),
+          Text(context.tr('Recent Orders'), style: serif(18, color: MMColors.cream)),
           const SizedBox(height: 8),
           orders.when(
             loading: () => const LoadingView(),
@@ -516,7 +526,7 @@ class _ProductsTabState extends ConsumerState<_ProductsTab> {
           final products = ref.watch(productsProvider(shopId));
           return Column(children: [
             ListTile(
-              title: Text('My Products', style: serif(20)),
+              title: Text(context.tr('My Products'), style: serif(20)),
               trailing: FilledButton.icon(
                 onPressed: () => _addProduct(shopId),
                 icon: const Icon(Icons.add),
@@ -570,7 +580,7 @@ class _SellerOrdersTab extends ConsumerWidget {
   Future<void> _transition(BuildContext context, WidgetRef ref, String id, String status) async {
     try {
       await ApiClient.dio.patch('/orders/$id/status', data: {'status': status});
-      ref.invalidate(ordersProvider);
+      ref.invalidate(receivedOrdersProvider);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
@@ -581,7 +591,7 @@ class _SellerOrdersTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orders = ref.watch(ordersProvider);
+    final orders = ref.watch(receivedOrdersProvider);
     const nextStep = {
       'pending': 'confirmed',
       'confirmed': 'preparing',
@@ -592,12 +602,13 @@ class _SellerOrdersTab extends ConsumerWidget {
     };
     return SafeArea(
       child: Column(children: [
-        ListTile(title: Text('Orders Received', style: serif(20))),
+        const OrdersAutoRefresh(),
+        ListTile(title: Text(context.tr('Orders Received'), style: serif(20))),
         Expanded(
           child: orders.when(
             loading: () => const LoadingView(),
             error: (e, _) => ErrorView(
-                message: apiError(e), onRetry: () => ref.invalidate(ordersProvider)),
+                message: apiError(e), onRetry: () => ref.invalidate(receivedOrdersProvider)),
             data: (items) => items.isEmpty
                 ? const EmptyView(message: 'No orders yet.')
                 : ListView.separated(
@@ -607,28 +618,15 @@ class _SellerOrdersTab extends ConsumerWidget {
                     itemBuilder: (_, i) {
                       final o = items[i];
                       final status = o['status'].toString();
-                      final next = nextStep[status];
-                      final amounts = (o['amounts'] as Map?) ?? {};
-                      return Card(
-                        child: ListTile(
-                          title: Text('${o['orderNumber']} · ${rupees(amounts['total'])}'),
-                          subtitle: Text(((o['items'] as List?) ?? [])
-                              .map((it) => '${(it as Map)['name']} × ${it['quantity']}')
-                              .join(', ')),
-                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                            Chip(label: Text(status.replaceAll('_', ' '))),
-                            if (next != null) ...[
-                              const SizedBox(width: 8),
-                              FilledButton(
-                                onPressed: () => _transition(
-                                    context, ref, o['_id'].toString(), next),
-                                child: Text(next == 'confirmed'
-                                    ? 'Confirm'
-                                    : next.replaceAll('_', ' ')),
-                              ),
-                            ],
-                          ]),
-                        ),
+                      final pickup = o['isSelfPickup'] == true;
+                      // Self-pickup orders skip the delivery run: ready -> collected.
+                      final next = pickup
+                          ? (status == 'ready' ? 'delivered' : (status == 'picked_up' || status == 'out_for_delivery') ? null : nextStep[status])
+                          : nextStep[status];
+                      return SellerOrderCard(
+                        order: o,
+                        next: next,
+                        onAdvance: (n) => _transition(context, ref, o['_id'].toString(), n),
                       );
                     },
                   ),
@@ -644,7 +642,7 @@ class _EarningsTab extends ConsumerWidget {
   const _EarningsTab();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final orders = ref.watch(ordersProvider);
+    final orders = ref.watch(receivedOrdersProvider);
     return SafeArea(
       child: orders.when(
         loading: () => const LoadingView(),
@@ -660,13 +658,13 @@ class _EarningsTab extends ConsumerWidget {
             crossAxisSpacing: 12,
             childAspectRatio: 1.7,
             children: [
-              _StatCard(label: 'Today',
+              _StatCard(label: context.tr('Today'),
                   value: rupees(_earnings(items, window: const Duration(days: 1)))),
-              _StatCard(label: 'This Week',
+              _StatCard(label: context.tr('This Week'),
                   value: rupees(_earnings(items, window: const Duration(days: 7)))),
-              _StatCard(label: 'This Month',
+              _StatCard(label: context.tr('This Month'),
                   value: rupees(_earnings(items, window: const Duration(days: 30)))),
-              _StatCard(label: 'All Time', value: rupees(_earnings(items))),
+              _StatCard(label: context.tr('All Time'), value: rupees(_earnings(items))),
             ],
           ),
           const SizedBox(height: 16),
@@ -819,7 +817,7 @@ class _SellerProfileTab extends ConsumerWidget {
           const SizedBox(height: 20),
           Card(color: MMColors.cream, child: Column(children: [
             ListTile(
-              title: const Text('Business Profile'),
+              title: Text(context.tr('Business Profile')),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => showDialog(
                 context: context,
@@ -840,7 +838,15 @@ class _SellerProfileTab extends ConsumerWidget {
               ),
             ),
             ListTile(
-              title: const Text('Shop video'),
+              title: Text(context.tr('Shop photo')),
+              subtitle: Text(context.tr('The picture customers see on the home screen')),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: shops.asData?.value.isNotEmpty == true
+                  ? () => showShopPhotoSheet(context, shops.asData!.value.first)
+                  : null,
+            ),
+            ListTile(
+              title: Text(context.tr('Shop video')),
               subtitle: const Text('Show customers how you make your products'),
               trailing: const Icon(Icons.chevron_right),
               onTap: shops.asData?.value.isNotEmpty == true
@@ -848,12 +854,12 @@ class _SellerProfileTab extends ConsumerWidget {
                   : null,
             ),
             ListTile(
-              title: const Text('Bank Details'),
+              title: Text(context.tr('Bank Details')),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _bankDetails(context, ref),
             ),
             ListTile(
-              title: const Text('Address'),
+              title: Text(context.tr('Address')),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => showDialog(
                 context: context,
@@ -870,22 +876,23 @@ class _SellerProfileTab extends ConsumerWidget {
               ),
             ),
             ListTile(
-              title: const Text('Change Password'),
+              title: Text(context.tr('Change Password')),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _changePassword(context, ref),
             ),
             ListTile(
-              title: const Text('Become a customer'),
+              title: Text(context.tr('Become a customer')),
               trailing: const Icon(Icons.chevron_right),
               onTap: () async {
                 await ref.read(authProvider.notifier).switchRole('customer');
                 ref.invalidate(ordersProvider);
+                ref.invalidate(receivedOrdersProvider);
                 ref.invalidate(cartProvider);
                 if (context.mounted) context.go('/app');
               },
             ),
             ListTile(
-              title: const Text('Reviews'),
+              title: Text(context.tr('Reviews')),
               trailing: const Icon(Icons.chevron_right),
               onTap: shopId == null ? null : () => showDialog(
                 context: context,
@@ -920,8 +927,9 @@ class _SellerProfileTab extends ConsumerWidget {
                 ),
               ),
             ),
+            const LanguageTile(),
             ListTile(
-              title: const Text('Logout'),
+              title: Text(context.tr('Logout')),
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 ref.read(authProvider.notifier).logout();

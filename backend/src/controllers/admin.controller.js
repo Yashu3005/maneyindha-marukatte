@@ -33,7 +33,11 @@ exports.listUsers = async (req, res, next) => {
 };
 
 exports.setUserStatus = async (req, res, next) => {
-  try { ok(res, await adminService.setUserActive(req.params.id, req.body.isActive)); } catch (e) { next(e); }
+  try { ok(res, await adminService.setUserActive(req.params.id, req.body.isActive, { reason: req.body.reason })); } catch (e) { next(e); }
+};
+
+exports.setBusinessStatus = async (req, res, next) => {
+  try { ok(res, await adminService.setBusinessActive(req.params.businessId, req.body.isActive, { reason: req.body.reason })); } catch (e) { next(e); }
 };
 
 exports.listPromoVideos = async (req, res, next) => {
@@ -46,3 +50,13 @@ exports.reviewPromoVideo = async (req, res, next) => {
 exports.removePromoVideo = async (req, res, next) => {
   try { ok(res, await require('../services/promoVideo.service').adminRemoveVideo(req.params.businessId)); } catch (e) { next(e); }
 };
+
+// ---- read-only insight views (owners, shops, products, badges, growth) ----
+const insights = require('../services/adminInsights.service');
+const noStore = (res) => res.set('Cache-Control', 'no-store');
+exports.owners = async (req, res, next) => { try { noStore(res); const { items, meta } = await insights.owners(req.query); ok(res, items, meta); } catch (e) { next(e); } };
+exports.ownerDetail = async (req, res, next) => { try { noStore(res); ok(res, await insights.ownerDetail(req.params.id)); } catch (e) { next(e); } };
+exports.shops = async (req, res, next) => { try { noStore(res); const { items, meta } = await insights.shops(req.query); ok(res, items, meta); } catch (e) { next(e); } };
+exports.products = async (req, res, next) => { try { noStore(res); const { items, meta } = await insights.products(req.query); ok(res, items, meta); } catch (e) { next(e); } };
+exports.badges = async (req, res, next) => { try { noStore(res); ok(res, await insights.badges()); } catch (e) { next(e); } };
+exports.growth = async (req, res, next) => { try { noStore(res); ok(res, await insights.growth(req.query)); } catch (e) { next(e); } };

@@ -61,7 +61,7 @@ exports.switchRole = async (req, res, next) => {
     // entrepreneurs skip onboarding — decided server-side, no race.
     const Business = require('../models/Business');
     const hasBusiness = role === 'entrepreneur'
-      ? !!(await Business.exists({ owner: user._id, isActive: true }))
+      ? !!(await Business.exists({ owner: user._id, $or: [{ isActive: true }, { 'suspension.at': { $ne: null } }] }))
       : false;
     ok(res, { user: sanitize(user), ...(await issueSession(user, req.user.sid)), hasBusiness });
   } catch (e) { next(e); }

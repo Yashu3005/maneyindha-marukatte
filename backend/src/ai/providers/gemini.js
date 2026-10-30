@@ -29,16 +29,29 @@ exports.completeJson = async ({ system, prompt, schema, maxTokens = 1500 }) => {
     label: 'gemini',
   });
   const cand = data?.candidates?.[0];
-  // Blocked prompts / safety stops / truncation must not be treated as an answer.
-  // Only the reason is logged (never the prompt or the answer text).
-  if (!cand || data?.promptFeedback?.blockReason || (cand.finishReason && cand.finishReason !== 'STOP')) {
-    logger.warn(`Gemini answer rejected: finishReason=${cand?.finishReason || 'none'} blockReason=${data?.promptFeedback?.blockReason || 'none'}`);
-    throw errors.badOutput();
+  const block = data?.promptFeedback?.blockReason;
+  if (!cand || block) {
+    logger.warn(`Gemini gave no answer: blockReason=${block || 'none'}`);
+    throw errors.badOutput(block ? 'BLOCKED' : 'NO_ANSWER');
   }
   // Skip the model's private "thought" parts; only the final answer is JSON.
-  const text = (cand.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
-  try { return JSON.parse(text); } catch {
-    logger.warn(`Gemini answer rejected: not valid JSON (${text.length} characters)`);
-    throw errors.badOutput();
-  }
+  const text = (cand.content?.parts || []).filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
+  const stoppedEarly = cand.finishReason && cand.finishReason !== 'STOP'; // cut off, or stopped by a safety filter
+  const parsed = stoppedEarly ? undefined : extractJson(text);
+  if (parsed !== undefined) return parsed;
+  // Only the reason is logged (never the prompt or the answer text).
+  logger.warn(`Gemini answer rejected: finishReason=${cand.finishReason || 'none'} length=${text.length}`);
+  throw errors.badOutput(stoppedEarly ? cand.finishReason : (text ? 'NOT_JSON' : 'EMPTY'));
 };
+
+/** Parses the model's JSON, tolerating a ```json fence or a sentence around it. Returns undefined if there is none. */
+function extractJson(text) {
+  if (!text) return undefined;
+  const attempts = [text, text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '')];
+  const a = text.indexOf('{'); const b = text.lastIndexOf('}');
+  if (a !== -1 && b > a) attempts.push(text.slice(a, b + 1));
+  for (const t of attempts) {
+    try { const v = JSON.parse(t); if (v && typeof v === 'object') return v; } catch { /* try the next form */ }
+  }
+  return undefined;
+}

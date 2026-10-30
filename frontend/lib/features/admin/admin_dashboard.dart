@@ -241,22 +241,39 @@ class _AdminMembersTabState extends ConsumerState<AdminMembersTab> {
 
   Future<void> _toggle(Map u) async {
     final suspend = u['isActive'] != false;
+    final reasonCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setD) => AlertDialog(
         title: Text(suspend ? 'Suspend this member?' : 'Restore this member?'),
-        content: Text(suspend
-            ? '${u['name'] ?? 'This member'} will be signed out and unable to sign in until restored.'
-            : '${u['name'] ?? 'This member'} will be able to sign in again.'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(suspend
+              ? '${u['name'] ?? 'This member'} will be signed out, unable to sign in, and any shops they own are hidden from customers. They are told by email and in the app.'
+              : '${u['name'] ?? 'This member'} will be able to sign in again, their hidden shops come back, and they are told by email and in the app.'),
+          if (suspend) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              maxLength: 300,
+              maxLines: 2,
+              onChanged: (_) => setD(() {}),
+              decoration: const InputDecoration(labelText: 'Reason (the member will see this)'),
+            ),
+          ],
+        ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(suspend ? 'Suspend' : 'Restore')),
+          FilledButton(
+            onPressed: (suspend && reasonCtrl.text.trim().length < 3) ? null : () => Navigator.pop(ctx, true),
+            child: Text(suspend ? 'Suspend' : 'Restore'),
+          ),
         ],
-      ),
+      )),
     );
     if (ok != true) return;
     try {
-      await ApiClient.dio.patch('/admin/users/${u['_id']}/status', data: {'isActive': !suspend});
+      await ApiClient.dio.patch('/admin/users/${u['_id']}/status',
+          data: {'isActive': !suspend, if (suspend) 'reason': reasonCtrl.text.trim()});
       ref.invalidate(adminUsersProvider);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiError(e))));

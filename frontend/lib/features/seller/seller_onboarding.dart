@@ -172,6 +172,8 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   final Set<String> _busy = {};
   String? _error;
   bool _loading = true;
+  String? _photoUrl; // the business profile photo (public, shown to customers)
+  static const _maxPhotoBytes = 3 * 1024 * 1024;
 
   String? get _businessId => ref.read(sellerOnboardingProvider)['businessId']?.toString();
 
@@ -188,6 +190,8 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     try {
       final res = await ApiClient.dio.get('/businesses/$id/documents');
       _apply((res.data['data']['documents'] as List?) ?? const []);
+      final p = res.data['data']['photoUrl']?.toString();
+      if (mounted && p != null && p.startsWith('https://')) setState(() => _photoUrl = p);
     } catch (_) {
       // not fatal: the owner can still upload
     } finally {
@@ -253,6 +257,118 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     } finally {
       if (mounted) setState(() => _busy.remove(type));
     }
+  }
+
+  Future<void> _uploadPhoto() async {
+    final businessId = _businessId;
+    if (businessId == null) {
+      setState(() => _error = 'Please go back and save your business details first.');
+      return;
+    }
+    setState(() => _error = null);
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+        withData: true,
+      );
+    } catch (_) {
+      setState(() => _error = 'Could not open the file picker. Please try again.');
+      return;
+    }
+    if (picked == null || picked.files.isEmpty) return; // cancelled
+    final file = picked.files.first;
+    final bytes = file.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      setState(() => _error = 'That photo could not be read. Please choose another.');
+      return;
+    }
+    if (bytes.length > _maxPhotoBytes) {
+      setState(() => _error = 'That photo is ${_prettySize(bytes.length)}. Please choose one under 3 MB.');
+      return;
+    }
+    setState(() => _busy.add('photo'));
+    try {
+      final form = FormData.fromMap({'photo': MultipartFile.fromBytes(bytes, filename: file.name)});
+      final res = await ApiClient.dio.post('/businesses/$businessId/photo', data: form);
+      final url = (res.data['data'] as Map)['bannerUrl']?.toString();
+      if (mounted) setState(() => _photoUrl = url);
+      ref.invalidate(myBusinessesProvider);
+    } catch (e) {
+      if (mounted) setState(() => _error = apiError(e));
+    } finally {
+      if (mounted) setState(() => _busy.remove('photo'));
+    }
+  }
+
+  Widget _photoTile() {
+    final working = _busy.contains('photo');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text('Business profile photo', style: serif(16, weight: FontWeight.w400, color: MMColors.cream)),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(color: MMColors.marigold, borderRadius: BorderRadius.circular(8)),
+            child: const Text('Required',
+                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Material(
+          color: MMColors.cream,
+          borderRadius: BorderRadius.circular(14),
+          elevation: 2,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: working ? null : _uploadPhoto,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: working
+                  ? const SizedBox(
+                      height: 56,
+                      child: Center(child: SizedBox(width: 26, height: 26,
+                          child: CircularProgressIndicator(strokeWidth: 3, color: MMColors.deepOlive))))
+                  : _photoUrl == null
+                      ? Column(children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: const BoxDecoration(color: MMColors.sage, shape: BoxShape.circle),
+                            child: const Icon(Icons.storefront_outlined, color: MMColors.deepOlive),
+                          ),
+                          const SizedBox(height: 8),
+                          Text('Tap to choose a photo', style: serif(15)),
+                          const SizedBox(height: 2),
+                          Text('A clear photo of your shop, kitchen or products. Customers will see it. JPG, PNG or WebP, up to 3 MB.',
+                              textAlign: TextAlign.center, style: serif(12, weight: FontWeight.w400)),
+                        ])
+                      : Row(children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: NetImage(_photoUrl, width: 72, height: 72),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Row(children: [
+                              const Icon(Icons.check_circle, size: 16, color: MMColors.moss),
+                              const SizedBox(width: 4),
+                              Text('Photo added', style: serif(13)),
+                            ]),
+                          ),
+                          IconButton(
+                            tooltip: 'Replace',
+                            icon: const Icon(Icons.swap_horiz, color: MMColors.deepOlive),
+                            onPressed: _uploadPhoto,
+                          ),
+                        ]),
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 
   Future<void> _remove(String type) async {
@@ -373,7 +489,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final ready = _docs.containsKey('id_proof') && _docs.containsKey('business_proof');
+    final ready = _docs.containsKey('id_proof') && _docs.containsKey('business_proof') && _photoUrl != null;
     return OliveScaffold(
       child: _loading
           ? const Padding(
@@ -397,6 +513,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                 onChanged: (v) { if (v != null) _changeIdentityType(v); },
               ),
               const SizedBox(height: 18),
+              _photoTile(),
               _tile(
                 type: 'id_proof',
                 title: '$_identityType / ID Proof',
@@ -441,6 +558,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                   data['idName'] = _docs['id_proof']?.name;
                   data['proofName'] = _docs['business_proof']?.name;
                   data['addressName'] = _docs['address_proof']?.name;
+                  data['photoAdded'] = true;
                   ref.read(sellerOnboardingProvider.notifier).state = data;
                   context.push('/seller/onboarding/review');
                 },
@@ -510,6 +628,7 @@ class _ReviewDetailsScreenState extends ConsumerState<ReviewDetailsScreen> {
             _row('Experience', data['years']?.toString()),
             _row('Address', data['address']?.toString()),
             _row('Identity', data['identityType']?.toString()),
+            if (data['photoAdded'] == true) _row('Profile photo', 'Added'),
             _row('ID proof', data['idName']?.toString()),
             _row('Business proof', data['proofName']?.toString()),
             if (data['addressName'] != null) _row('Address proof', data['addressName']?.toString()),

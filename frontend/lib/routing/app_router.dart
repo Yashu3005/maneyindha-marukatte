@@ -15,6 +15,7 @@ import '../features/admin/admin_screen.dart';
 import '../features/admin/admin_login_screen.dart';
 import '../features/rewards/rewards_screen.dart';
 import '../features/assistant/assistant_screen.dart';
+import '../features/notifications/notifications_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -53,6 +54,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/orders', builder: (_, __) => const OrdersScreen()),
       GoRoute(path: '/rewards', builder: (_, __) => const RewardsScreen()),
       GoRoute(path: '/assistant', builder: (_, __) => const AssistantScreen()),
+      GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
       GoRoute(path: '/admin/login', builder: (_, __) => const AdminLoginScreen()),
       GoRoute(path: '/admin', builder: (_, __) => const AdminScreen()),
     ],

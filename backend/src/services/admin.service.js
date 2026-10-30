@@ -6,6 +6,8 @@ const Review = require('../models/Review');
 const Coupon = require('../models/Coupon');
 const RefreshSession = require('../models/RefreshSession');
 const AppError = require('../utils/AppError');
+const notifications = require('./notification.service');
+const email = require('./email.service');
 const { parsePage } = require('../utils/pagination');
 
 const ADMIN_ROLES = ['admin', 'super_admin'];
@@ -216,13 +218,60 @@ exports.listUsers = async ({ role, q, page, limit } = {}) => {
   return { items, meta: { page: p.page, limit: p.limit, total } };
 };
 
-/** Suspend or restore a member. Suspending also signs them out everywhere. The administrator cannot be suspended. */
-exports.setUserActive = async (userId, isActive) => {
+const cleanReason = (r) => String(r ?? '').trim().slice(0, 300);
+
+// Tell the person in the app AND by email. Neither can fail the admin's action.
+async function tell(userId, to, { title, body, kind, data }) {
+  await notifications.notify(userId, { type: 'system', title, body, data: { kind, ...data } });
+  const mail = await email.sendNoticeEmail({ to, subject: title, heading: title, message: body });
+  return { inApp: true, email: !!mail?.sent };
+}
+
+/** Suspend or restore a member. A reason is required to suspend. Suspending signs them out everywhere and hides
+ *  their shops; restoring brings back only the shops that were hidden because of this account. The administrator
+ *  cannot be suspended. Asking for the state the member is already in does nothing (no duplicate notices). */
+exports.setUserActive = async (userId, isActive, { reason } = {}) => {
   const user = await User.findById(userId);
   if (!user || user.deletedAt) throw new AppError('User not found', 404);
   if (ADMIN_ROLES.includes(user.role)) throw new AppError('The administrator account cannot be changed here', 403);
-  user.isActive = !!isActive;
+  const next = !!isActive;
+  const why = cleanReason(reason);
+  if (!next && why.length < 3) throw new AppError('Give a reason for the suspension', 422);
+  if (next === (user.isActive !== false)) return { id: user._id, isActive: next, changed: false };
+
+  user.isActive = next;
+  user.suspension = next ? undefined : { reason: why, at: new Date() };
   await user.save();
-  if (!isActive) await RefreshSession.deleteMany({ user: user._id });
-  return { id: user._id, isActive: user.isActive };
+  if (!next) {
+    await RefreshSession.deleteMany({ user: user._id });
+    await Business.updateMany({ owner: user._id, isActive: true, deletedAt: null },
+      { $set: { isActive: false, suspension: { reason: 'The owner account is suspended', at: new Date(), byOwner: true } } });
+  } else {
+    await Business.updateMany({ owner: user._id, 'suspension.byOwner': true }, { $set: { isActive: true }, $unset: { suspension: 1 } });
+  }
+  const notified = await tell(user._id, user.email, next
+    ? { title: 'Your account was restored', body: 'Your account is active again. You can sign in now.', kind: 'account_restored' }
+    : { title: 'Your account was suspended', body: `Your account has been suspended.\nReason: ${why}\nIf you think this is a mistake, please contact support.`, kind: 'account_suspended' });
+  return { id: user._id, isActive: next, changed: true, notified };
+};
+
+/** Suspend or restore ONE shop (it disappears from customers while suspended). Reason required to suspend. */
+exports.setBusinessActive = async (businessId, isActive, { reason } = {}) => {
+  const business = await Business.findOne({ _id: businessId, deletedAt: null });
+  if (!business) throw new AppError('Business not found', 404);
+  const next = !!isActive;
+  const why = cleanReason(reason);
+  if (!next && why.length < 3) throw new AppError('Give a reason for the suspension', 422);
+  if (next === (business.isActive !== false)) return { id: business._id, isActive: next, changed: false };
+  const owner = await User.findById(business.owner).select('email isActive');
+  if (next && owner && owner.isActive === false) {
+    throw new AppError("The owner's account is suspended. Restore the account first.", 409, 'OWNER_SUSPENDED');
+  }
+  business.isActive = next;
+  business.suspension = next ? undefined : { reason: why, at: new Date(), byOwner: false };
+  await business.save();
+  const notified = await tell(business.owner, owner?.email, next
+    ? { title: `${business.name} was restored`, body: `${business.name} is visible to customers again.`, kind: 'shop_restored', data: { businessId: String(business._id) } }
+    : { title: `${business.name} was suspended`, body: `${business.name} is hidden from customers.\nReason: ${why}\nIf you think this is a mistake, please contact support.`, kind: 'shop_suspended', data: { businessId: String(business._id) } });
+  return { id: business._id, isActive: next, changed: true, notified };
 };
